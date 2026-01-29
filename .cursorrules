@@ -1,0 +1,59 @@
+# Project Rules for uteki.open
+
+## Documentation Guidelines
+
+### Root Directory Documentation Policy
+
+**IMPORTANT: Root directory documentation is strictly controlled.**
+
+1. **Permitted Files**:
+   - `README.md` - Project overview and main documentation
+   - `.cursorrules` - This rules file
+   - `.gitignore` - Git configuration
+   - Standard configuration files (package.json, tsconfig.json, pyproject.toml, etc.)
+
+2. **Prohibited Actions**:
+   - ❌ **DO NOT** create new `.md` documentation files in the root directory without explicit user permission
+   - ❌ **DO NOT** create implementation summaries, migration plans, or progress reports in the root
+   - ❌ **DO NOT** create "COMPLETION", "SUMMARY", "IMPLEMENTATION", "TODO", "GUIDE" markdown files in root
+
+3. **Where to Put Documentation**:
+   - Code documentation: Use inline comments and docstrings
+   - Feature documentation: Create in `/docs/` subdirectory if needed
+   - API documentation: Use OpenAPI specs in appropriate locations
+   - Implementation notes: Add to existing documentation or ask user first
+
+4. **Exception Process**:
+   - If you believe documentation is needed in the root directory, **ASK THE USER FIRST**
+   - Explain why it should be in root rather than `/docs/` or inline
+   - Wait for explicit approval before creating
+
+## Code Guidelines
+
+### General Principles
+- Keep code DRY (Don't Repeat Yourself)
+- Write clear, self-documenting code
+- Use TypeScript/Python type hints
+- Follow existing project patterns
+
+### Frontend (React + TypeScript)
+- Use functional components with hooks
+- Material-UI for components
+- Maintain consistent theming (uteki theme)
+- Keep components focused and reusable
+
+### Backend (FastAPI + Python)
+- Follow DDD (Domain-Driven Design) architecture
+- Use async/await patterns
+- Type hints required
+- SQLAlchemy for ORM
+
+### Commit Guidelines
+- Never commit without user instruction
+- Always include Co-Authored-By line when creating commits
+- Use semantic commit messages
+
+---
+
+**Last Updated**: 2026-01-30
+**Version**: 1.0
