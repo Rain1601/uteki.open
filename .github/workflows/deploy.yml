@@ -48,8 +48,8 @@ jobs:
             --set-env-vars="DATABASE_URL=${{ secrets.DATABASE_URL }}" \
             --set-env-vars="GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
             --set-env-vars="GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-            --set-env-vars="GITHUB_CLIENT_ID=${{ secrets.GITHUB_CLIENT_ID }}" \
-            --set-env-vars="GITHUB_CLIENT_SECRET=${{ secrets.GITHUB_CLIENT_SECRET }}" \
+            --set-env-vars="GITHUB_CLIENT_ID=${{ secrets.GH_CLIENT_ID }}" \
+            --set-env-vars="GITHUB_CLIENT_SECRET=${{ secrets.GH_CLIENT_SECRET }}" \
             --set-env-vars="SECRET_KEY=${{ secrets.SECRET_KEY }}" \
             --set-env-vars="ENVIRONMENT=production" \
             --memory 512Mi \
@@ -97,7 +97,7 @@ jobs:
           docker build \
             --build-arg VITE_API_URL=${{ steps.get-backend-url.outputs.backend_url }} \
             --build-arg VITE_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-            --build-arg VITE_GITHUB_CLIENT_ID=${{ secrets.GITHUB_CLIENT_ID }} \
+            --build-arg VITE_GITHUB_CLIENT_ID=${{ secrets.GH_CLIENT_ID }} \
             -t gcr.io/$GCP_PROJECT_ID/$FRONTEND_SERVICE:$GITHUB_SHA .
           docker push gcr.io/$GCP_PROJECT_ID/$FRONTEND_SERVICE:$GITHUB_SHA
 
