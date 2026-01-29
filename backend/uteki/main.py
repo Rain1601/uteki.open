@@ -26,6 +26,24 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database connections...")
     try:
         await db_manager.initialize()
+        logger.info("Database connections initialized")
+
+        # 创建数据库表
+        logger.info("Creating database tables if not exist...")
+        from uteki.infrastructure.database.base import Base
+        from uteki.common.config import settings
+        from sqlalchemy import text
+
+        # Import all models to register them
+        from uteki.domains.admin.models import APIKey, LLMProvider, ExchangeConfig
+        from uteki.domains.agent.models import ChatConversation, ChatMessage
+        from uteki.domains.user.models import User
+
+        async with db_manager.postgres_engine.begin() as conn:
+            if settings.database_type == "sqlite":
+                await conn.execute(text("PRAGMA foreign_keys = ON"))
+            await conn.run_sync(Base.metadata.create_all)
+
         logger.info("Database initialization complete")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
@@ -46,9 +64,15 @@ app = FastAPI(
 )
 
 # CORS中间件配置
+import os
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:5174"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite和其他前端
+    allow_origins=cors_origins,  # 从环境变量读取，默认Vite端口
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -138,28 +162,32 @@ async def api_status():
 
 # 导入domain路由
 from uteki.domains.admin.api import router as admin_router
-from uteki.domains.trading.api import router as trading_router
-from uteki.domains.data.api import router as data_router
 from uteki.domains.agent.api import router as agent_router
-from uteki.domains.evaluation.api import router as evaluation_router
-from uteki.domains.dashboard.api import router as dashboard_router
+# from uteki.domains.trading.api import router as trading_router  # 待实现
+# from uteki.domains.data.api import router as data_router  # 待实现
+# from uteki.domains.evaluation.api import router as evaluation_router  # 待实现
+# from uteki.domains.dashboard.api import router as dashboard_router  # 待实现
 
 # 注册domain路由
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
-app.include_router(trading_router, prefix="/api/trading", tags=["trading"])
-app.include_router(data_router, prefix="/api/data", tags=["data"])
 app.include_router(agent_router, prefix="/api/agent", tags=["agent"])
-app.include_router(evaluation_router, prefix="/api/evaluation", tags=["evaluation"])
-app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
+# app.include_router(trading_router, prefix="/api/trading", tags=["trading"])  # 待实现
+# app.include_router(data_router, prefix="/api/data", tags=["data"])  # 待实现
+# app.include_router(evaluation_router, prefix="/api/evaluation", tags=["evaluation"])  # 待实现
+# app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])  # 待实现
 
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # 从环境变量读取端口，默认8888
+    port = int(os.getenv("API_PORT", "8888"))
 
     uvicorn.run(
         "uteki.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=True,
         log_level="info"
     )

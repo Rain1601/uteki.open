@@ -23,6 +23,5 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 
-# 运行数据库迁移和启动服务
-CMD python -m uteki.scripts.init_db && \
-    uvicorn uteki.main:app --host 0.0.0.0 --port $PORT
+# 启动服务（数据库初始化在应用启动时自动执行）
+CMD uvicorn uteki.main:app --host 0.0.0.0 --port $PORT
