@@ -22,38 +22,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时初始化数据库连接
-    logger.info("Initializing database connections...")
-    try:
-        await db_manager.initialize()
-        logger.info("Database connections initialized")
-
-        # 创建数据库表
-        logger.info("Creating database tables if not exist...")
-        from uteki.infrastructure.database.base import Base
-        from uteki.common.config import settings
-        from sqlalchemy import text
-
-        # Import all models to register them
-        from uteki.domains.admin.models import APIKey, LLMProvider, ExchangeConfig
-        from uteki.domains.agent.models import ChatConversation, ChatMessage
-        from uteki.domains.user.models import User
-
-        async with db_manager.postgres_engine.begin() as conn:
-            if settings.database_type == "sqlite":
-                await conn.execute(text("PRAGMA foreign_keys = ON"))
-            await conn.run_sync(Base.metadata.create_all)
-
-        logger.info("Database initialization complete")
-    except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
-        logger.warning("Application will start without database connectivity")
-        # Don't raise - allow app to start even if DB init fails
-
+    logger.info("Application starting...")
+    # Database initialization is deferred to avoid blocking startup
     yield
-
-    # 关闭时清理资源
-    logger.info("Shutting down...")
+    logger.info("Application shutting down...")
 
 
 # 创建FastAPI应用
@@ -90,6 +62,15 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+
+@app.get("/healthz")
+async def startup_probe():
+    """
+    Startup probe - minimal check for Cloud Run
+    Returns immediately to satisfy Cloud Run startup requirements
+    """
+    return {"status": "ok"}
 
 
 @app.get("/health")

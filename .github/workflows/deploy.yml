@@ -50,7 +50,8 @@ jobs:
             --cpu 1 \
             --max-instances 10 \
             --min-instances 0 \
-            --timeout 300
+            --timeout 300 \
+            --port 8080
 
       - name: Get Backend URL
         id: backend-url
