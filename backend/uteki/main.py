@@ -23,9 +23,21 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     logger.info("Application starting...")
-    # Database initialization is deferred to avoid blocking startup
+    # Database initialization happens in background to avoid blocking Cloud Run startup
+    import asyncio
+    asyncio.create_task(initialize_databases())
     yield
     logger.info("Application shutting down...")
+
+
+async def initialize_databases():
+    """后台初始化数据库连接"""
+    try:
+        await db_manager.initialize()
+        logger.info("Database initialization completed")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        # Don't crash the app, continue with degraded functionality
 
 
 # 创建FastAPI应用
