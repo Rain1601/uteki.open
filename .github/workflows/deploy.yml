@@ -46,8 +46,9 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --set-env-vars="ENVIRONMENT=production,DATABASE_TYPE=postgresql,POSTGRES_HOST=db.iyxaqxfrwklmpwhkdbug.supabase.co,POSTGRES_PORT=5432,POSTGRES_USER=postgres,POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }},POSTGRES_DB=postgres,DEBUG=false,GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GITHUB_CLIENT_ID=${{ secrets.GH_CLIENT_ID }},GITHUB_CLIENT_SECRET=${{ secrets.GH_CLIENT_SECRET }},SECRET_KEY=${{ secrets.SECRET_KEY }}" \
-            --memory 512Mi \
-            --cpu 1 \
+            --memory 1Gi \
+            --cpu 2 \
+            --cpu-boost \
             --max-instances 10 \
             --min-instances 0 \
             --timeout 300 \
