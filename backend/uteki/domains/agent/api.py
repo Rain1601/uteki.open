@@ -469,6 +469,74 @@ async def research_stream(request: ResearchRequest):
     )
 
 
+@router.post(
+    "/debug/create-tables",
+    summary="手动创建数据库表",
+)
+async def debug_create_tables(session: AsyncSession = Depends(get_db_session)):
+    """手动创建所有必需的数据库表"""
+    try:
+        from sqlalchemy import text
+
+        sqls = [
+            # Chat Conversations
+            """
+            CREATE TABLE IF NOT EXISTS agent.chat_conversations (
+                id VARCHAR(36) PRIMARY KEY,
+                user_id VARCHAR(36) NOT NULL DEFAULT 'default',
+                title VARCHAR(500) NOT NULL DEFAULT '新对话',
+                mode VARCHAR(50) NOT NULL DEFAULT 'chat',
+                is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_chat_conversations_user ON agent.chat_conversations(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_chat_conversations_created ON agent.chat_conversations(created_at)",
+
+            # Chat Messages
+            """
+            CREATE TABLE IF NOT EXISTS agent.chat_messages (
+                id VARCHAR(36) PRIMARY KEY,
+                conversation_id VARCHAR(36) NOT NULL REFERENCES agent.chat_conversations(id) ON DELETE CASCADE,
+                role VARCHAR(20) NOT NULL,
+                content TEXT NOT NULL,
+                llm_provider VARCHAR(50),
+                llm_model VARCHAR(100),
+                token_usage JSONB,
+                research_data JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON agent.chat_messages(conversation_id)",
+            "CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON agent.chat_messages(created_at)",
+        ]
+
+        async with session.begin():
+            for sql in sqls:
+                await session.execute(text(sql))
+
+        # 验证
+        result = await session.execute(
+            text("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('agent', 'admin') ORDER BY table_schema, table_name")
+        )
+        tables = [f"{row[0]}.{row[1]}" for row in result.fetchall()]
+
+        return {
+            "status": "success",
+            "message": "Tables created successfully",
+            "tables": tables
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 @router.get(
     "/debug/config",
     summary="配置信息检查",
