@@ -14,5 +14,11 @@ python -c "from uteki.main import app; print('Import successful')" || {
     exit 1
 }
 
+# Initialize database (create tables if they don't exist)
+echo "Initializing database..."
+python -m uteki.scripts.init_db init || {
+    echo "Database initialization failed, but continuing (tables may already exist)"
+}
+
 echo "Starting uvicorn..."
 exec uvicorn uteki.main:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info
