@@ -50,6 +50,10 @@ poetry.lock
 *.sqlite
 *.sqlite3
 
+# Logs (keep directory structure and README, ignore log files)
+logs/*.log
+logs/*.log.*
+
 # Environment variables
 .env
 .env.local

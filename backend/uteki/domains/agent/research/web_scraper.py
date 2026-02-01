@@ -106,14 +106,19 @@ class WebScraper:
 
     async def _scrape_single(self, url: str) -> Optional[ScrapedContent]:
         """Internal method to scrape a single URL."""
+        logger.debug(f"🔍 Scraping URL: {url}")
         try:
             # Fetch HTML
             html = await self._fetch_html(url)
             if not html:
+                logger.warning(f"❌ Failed to fetch HTML from {url}")
                 return None
+
+            logger.debug(f"✓ Fetched HTML from {url} (length: {len(html)})")
 
             # Extract title
             title = self._extract_title(html)
+            logger.debug(f"✓ Title extracted: {title or 'N/A'}")
 
             # Try Trafilatura first
             content = self._extract_with_trafilatura(html)
@@ -121,16 +126,25 @@ class WebScraper:
 
             # Fallback to BeautifulSoup
             if not content or len(content.strip()) < 50:
-                logger.debug(f"Trafilatura failed for {url}, trying BeautifulSoup")
+                logger.debug(f"⚠️ Trafilatura extraction insufficient ({len(content or '')} chars), trying BeautifulSoup for {url}")
                 content = self._extract_with_beautifulsoup(html)
                 extraction_method = "beautifulsoup"
 
             if not content or len(content.strip()) < 50:
-                logger.warning(f"Failed to extract meaningful content from {url}")
+                logger.warning(
+                    f"❌ Failed to extract meaningful content from {url} - "
+                    f"content length: {len(content or '')} chars (minimum 50 required)"
+                )
                 return None
 
             # Clean and truncate
             content = self._clean_content(content)
+            logger.info(
+                f"✅ Successfully scraped {url} - "
+                f"title: {title or 'N/A'}, "
+                f"content: {len(content)} chars, "
+                f"method: {extraction_method}"
+            )
 
             return ScrapedContent(
                 url=url,
@@ -141,11 +155,12 @@ class WebScraper:
             )
 
         except Exception as e:
-            logger.error(f"Error scraping {url}: {e}")
+            logger.error(f"❌ Error scraping {url}: {type(e).__name__}: {e}", exc_info=True)
             return None
 
     async def _fetch_html(self, url: str) -> Optional[str]:
         """Fetch HTML content from URL."""
+        logger.debug(f"📡 Fetching HTML from {url} (timeout: {self.timeout}s)")
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
@@ -155,19 +170,23 @@ class WebScraper:
                 )
 
                 if response.status_code == 200:
+                    logger.debug(f"✓ HTTP 200 OK for {url} (size: {len(response.text)} bytes)")
                     return response.text
                 else:
-                    logger.warning(f"HTTP {response.status_code} for {url}")
+                    logger.warning(
+                        f"⚠️ HTTP {response.status_code} for {url} - "
+                        f"headers: {dict(response.headers)}"
+                    )
                     return None
 
         except httpx.TimeoutException:
-            logger.warning(f"Timeout fetching {url}")
+            logger.warning(f"⏱️ Timeout ({self.timeout}s) fetching {url}")
             return None
         except httpx.HTTPError as e:
-            logger.warning(f"HTTP error fetching {url}: {e}")
+            logger.warning(f"🌐 HTTP error fetching {url}: {type(e).__name__}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error fetching {url}: {e}")
+            logger.error(f"💥 Unexpected error fetching {url}: {type(e).__name__}: {e}", exc_info=True)
             return None
 
     @staticmethod

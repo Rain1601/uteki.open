@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     minimax_group_id: Optional[str] = None
     google_api_key: Optional[str] = None  # Gemini
 
+    # Google Search API (for Research mode)
+    google_search_api_key: Optional[str] = None
+    google_search_engine_id: Optional[str] = None
+
     # LLM Provider Configuration
     llm_provider: str = "anthropic"  # 默认使用 Anthropic
     llm_model: str = "claude-sonnet-4-20250514"

@@ -10,11 +10,14 @@ import logging
 
 from uteki.common.database import db_manager
 from uteki.common.config import settings
+from uteki.common.logging_config import setup_logging
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# 配置日志系统
+setup_logging(
+    log_level="DEBUG",  # 开发环境使用 DEBUG 级别
+    log_dir="./logs",
+    log_file_prefix="uteki_dev",  # 日志文件: uteki_dev.log, uteki_dev.log.2026-02-01
+    backup_count=30  # 保留30天的日志
 )
 logger = logging.getLogger(__name__)
 

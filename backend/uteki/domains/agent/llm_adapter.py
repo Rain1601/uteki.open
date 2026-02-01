@@ -121,6 +121,30 @@ class BaseLLMAdapter(ABC):
         """
         pass
 
+    async def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        tools: Optional[List[LLMTool]] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        流式聊天接口（简化版，接受字典列表）
+
+        Args:
+            messages: 字典格式的消息列表 [{"role": "user", "content": "..."}]
+            tools: 可用工具列表
+
+        Yields:
+            str: 流式内容块
+        """
+        # Convert dict messages to LLMMessage objects
+        llm_messages = [
+            LLMMessage(role=msg.get("role", "user"), content=msg.get("content", ""))
+            for msg in messages
+        ]
+        # Call the main chat method with stream=True
+        async for chunk in self.chat(llm_messages, stream=True, tools=tools):
+            yield chunk
+
 
 class OpenAIAdapter(BaseLLMAdapter):
     """OpenAI LLM Adapter"""

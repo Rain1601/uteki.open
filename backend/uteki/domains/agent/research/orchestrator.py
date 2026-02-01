@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", "20"))
 MAX_SCRAPE_URLS = int(os.getenv("MAX_SCRAPE_URLS", "10"))
+WEB_SCRAPER_TIMEOUT = int(os.getenv("WEB_SCRAPER_TIMEOUT", "10"))
 
 
 class DeepResearchOrchestrator:
@@ -110,6 +111,7 @@ class DeepResearchOrchestrator:
             all_results: List[SearchResult] = []
 
             for i, subtask in enumerate(subtasks, 1):
+                logger.debug(f"🔍 Searching subtask {i}/{len(subtasks)}: '{subtask}'")
                 yield {
                     "type": "status",
                     "data": {"message": f"Searching: {subtask} ({i}/{len(subtasks)})"},
@@ -119,6 +121,7 @@ class DeepResearchOrchestrator:
                     query=subtask,
                     max_results=max_sources // len(subtasks) + 1,
                 )
+                logger.info(f"✅ Search returned {len(results)} results for '{subtask}'")
 
                 all_results.extend(results)
 
@@ -163,12 +166,14 @@ class DeepResearchOrchestrator:
             }
 
             # Step 3: Scrape content
-            logger.info(f"Scraping {min(len(unique_results), max_scrape)} URLs")
+            logger.info(f"📖 Scraping {min(len(unique_results), max_scrape)} URLs")
+            logger.debug(f"URLs to scrape: {[r.url for r in unique_results[:max_scrape]]}")
             yield {"type": "status", "data": {"message": "Reading sources..."}}
 
             urls_to_scrape = [r.url for r in unique_results[:max_scrape]]
 
             scraped_contents: List[ScrapedContent] = []
+            scrape_failures: List[str] = []
 
             def progress_callback(current: int, total: int):
                 """Called after each scrape completes."""
@@ -176,6 +181,7 @@ class DeepResearchOrchestrator:
 
             # Scrape with progress tracking
             for i, url in enumerate(urls_to_scrape, 1):
+                logger.debug(f"📄 Scraping {i}/{len(urls_to_scrape)}: {url}")
                 yield {
                     "type": "source_read",
                     "data": {
@@ -188,13 +194,32 @@ class DeepResearchOrchestrator:
                 content = await self.web_scraper.scrape_url(url)
                 if content:
                     scraped_contents.append(content)
+                    logger.debug(f"✅ Scraped {i}/{len(urls_to_scrape)}: {url} ({len(content.content)} chars)")
+                else:
+                    scrape_failures.append(url)
+                    logger.warning(f"❌ Failed to scrape {i}/{len(urls_to_scrape)}: {url}")
 
-            logger.info(f"Successfully scraped {len(scraped_contents)} pages")
+            logger.info(
+                f"📊 Scraping complete: {len(scraped_contents)}/{len(urls_to_scrape)} successful "
+                f"({len(scraped_contents) / len(urls_to_scrape) * 100:.1f}%)"
+            )
+
+            if scrape_failures:
+                logger.warning(f"⚠️ Failed URLs ({len(scrape_failures)}): {scrape_failures[:5]}{'...' if len(scrape_failures) > 5 else ''}")
 
             if not scraped_contents:
+                error_msg = (
+                    f"Failed to scrape any content from {len(urls_to_scrape)} URLs. "
+                    f"This could be due to: (1) anti-scraping protection, "
+                    f"(2) network issues, (3) timeout ({WEB_SCRAPER_TIMEOUT}s), "
+                    f"(4) content extraction failures. "
+                    f"Check logs for details."
+                )
+                logger.error(f"❌ {error_msg}")
+                logger.error(f"Failed URLs: {scrape_failures}")
                 yield {
                     "type": "error",
-                    "data": {"message": "Failed to scrape any content"},
+                    "data": {"message": error_msg},
                 }
                 return
 

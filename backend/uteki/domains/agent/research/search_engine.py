@@ -34,15 +34,17 @@ class GoogleSearchStrategy(SearchStrategy):
 
     async def search(self, query: str, max_results: int, region: str = "us-en") -> List[SearchResult]:
         """Search using Google Custom Search API."""
+        logger.debug(f"🔍 Google Search: '{query}' (max_results={max_results}, region={region})")
         try:
             from googleapiclient.discovery import build
             from googleapiclient.errors import HttpError
         except ImportError:
-            logger.error("google-api-python-client not installed")
+            logger.error("❌ google-api-python-client not installed - install with: pip install google-api-python-client")
             return []
 
         try:
             service = build("customsearch", "v1", developerKey=self.api_key)
+            logger.debug(f"✓ Google Custom Search service initialized")
 
             results = []
             num_per_request = min(max_results, 10)  # Google API max per request
@@ -103,38 +105,41 @@ class DuckDuckGoSearchStrategy(SearchStrategy):
 
     async def search(self, query: str, max_results: int, region: str = "us-en") -> List[SearchResult]:
         """Search using DuckDuckGo."""
+        logger.debug(f"🔍 DuckDuckGo Search: '{query}' (max_results={max_results}, region={region})")
         try:
-            from duckduckgo_search import DDGS
+            from ddgs import DDGS
         except ImportError:
-            logger.error("duckduckgo-search not installed")
+            logger.error("❌ ddgs not installed - install with: pip install ddgs")
             return []
 
         try:
             results = []
 
             with DDGS() as ddgs:
+                logger.debug(f"✓ DDGS client initialized")
                 search_results = ddgs.text(
                     query,
                     region=region.replace("-", "_"),
                     max_results=max_results,
                 )
 
-                for result in search_results:
-                    url = result.get("href", result.get("url", ""))
+                for i, result in enumerate(search_results, 1):
+                    url = result.get("href", result.get("link", ""))
                     domain = urlparse(url).netloc
+                    logger.debug(f"  [{i}] {result.get('title', 'N/A')} - {url}")
 
                     results.append(SearchResult(
                         title=result.get("title", ""),
                         url=url,
-                        snippet=result.get("body", result.get("snippet", "")),
+                        snippet=result.get("body", result.get("description", "")),
                         source=domain,
                     ))
 
-            logger.info(f"DuckDuckGo search returned {len(results)} results for query: {query}")
+            logger.info(f"✅ DuckDuckGo returned {len(results)} results for: '{query}'")
             return results
 
         except Exception as e:
-            logger.error(f"DuckDuckGo search failed: {e}")
+            logger.error(f"❌ DuckDuckGo search failed for '{query}': {type(e).__name__}: {e}", exc_info=True)
             return []
 
 
@@ -151,7 +156,7 @@ class SearchEngine:
 
     def __init__(
         self,
-        engine: str = "duckduckgo",
+        engine: str = "google",  # 默认使用 Google（更准确）
         google_api_key: str | None = None,
         google_engine_id: str | None = None,
     ):
@@ -164,8 +169,17 @@ class SearchEngine:
             google_engine_id: Google Custom Search Engine ID
         """
         self.preferred_engine = engine
-        self.google_api_key = google_api_key or os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
-        self.google_engine_id = google_engine_id or os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
+        # 支持两种环境变量名称格式
+        self.google_api_key = (
+            google_api_key
+            or os.getenv("GOOGLE_SEARCH_API_KEY")  # 新格式（推荐）
+            or os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")  # 旧格式（兼容）
+        )
+        self.google_engine_id = (
+            google_engine_id
+            or os.getenv("GOOGLE_SEARCH_ENGINE_ID")  # 新格式（推荐）
+            or os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")  # 旧格式（兼容）
+        )
 
         # Initialize strategies
         self._google_strategy = None

@@ -482,25 +482,26 @@ async def research_health():
     - google_configured: Google API是否已配置
     - dependencies: 依赖包状态
     """
-    import os
+    from uteki.common.config import settings
 
+    # Check Google Custom Search configuration
     google_configured = bool(
-        os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
-        and os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
+        settings.google_search_api_key and settings.google_search_engine_id
     )
 
-    search_engine = os.getenv("DEFAULT_SEARCH_ENGINE", "duckduckgo")
+    # Default to Google if configured, otherwise DuckDuckGo
+    search_engine = "google" if google_configured else "duckduckgo"
 
     # Check dependencies
     dependencies = {}
     try:
-        import duckduckgo_search
-        dependencies["duckduckgo_search"] = True
+        import ddgs  # New package name
+        dependencies["ddgs"] = True
     except ImportError:
-        dependencies["duckduckgo_search"] = False
+        dependencies["ddgs"] = False
 
     try:
-        import beautifulsoup4
+        import bs4  # beautifulsoup4
         dependencies["beautifulsoup4"] = True
     except ImportError:
         dependencies["beautifulsoup4"] = False
@@ -515,5 +516,7 @@ async def research_health():
         "status": "healthy",
         "search_engine": search_engine,
         "google_configured": google_configured,
+        "google_api_key_present": bool(settings.google_search_api_key),
+        "google_engine_id_present": bool(settings.google_search_engine_id),
         "dependencies": dependencies,
     }
