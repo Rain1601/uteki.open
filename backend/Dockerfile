@@ -11,10 +11,10 @@ RUN apt-get update && apt-get install -y \
 # 复制依赖文件
 COPY pyproject.toml poetry.lock* ./
 
-# 安装 Poetry 和依赖
+# 安装 Poetry 和依赖（包括所有 LLM 和 Research extras）
 RUN pip install poetry && \
     poetry config virtualenvs.create false && \
-    poetry install --without dev --no-root --no-interaction --no-ansi
+    poetry install --without dev --no-root --no-interaction --no-ansi --extras "llm-full research"
 
 # 复制应用代码
 COPY . .
