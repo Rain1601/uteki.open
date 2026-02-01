@@ -116,26 +116,57 @@ export default function HoverSidebar() {
   if (isMobile || isSmallScreen) {
     return (
       <>
-        {/* 汉堡菜单按钮 - 仅在移动端显示 */}
-        <IconButton
-          onClick={toggleSidebar}
+        {/* 移动端顶部导航栏 */}
+        <Box
           sx={{
             position: 'fixed',
-            top: 8,
-            left: 8,
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 56,
             zIndex: 1200,
-            color: theme.text.primary,
-            bgcolor: theme.background.secondary,
-            '&:hover': {
-              bgcolor: theme.background.tertiary,
-            },
-            // 增加触摸区域
-            minWidth: 48,
-            minHeight: 48,
+            bgcolor: theme.background.deepest,
+            borderBottom: `1px solid ${theme.border.subtle}`,
+            display: 'flex',
+            alignItems: 'center',
+            px: 1,
           }}
         >
-          <MenuIcon />
-        </IconButton>
+          <IconButton
+            onClick={toggleSidebar}
+            sx={{
+              color: theme.text.primary,
+              '&:hover': {
+                bgcolor: theme.background.tertiary,
+              },
+              minWidth: 48,
+              minHeight: 48,
+            }}
+          >
+            <MenuIcon />
+          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
+            <Box
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: '6px',
+                background: `linear-gradient(135deg, ${theme.brand.primary} 0%, ${theme.brand.accent} 100%)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '1rem',
+              }}
+            >
+              U
+            </Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.text.primary }}>
+              uteki.open
+            </Typography>
+          </Box>
+        </Box>
 
         <SwipeableDrawer
           anchor="left"

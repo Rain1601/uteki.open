@@ -24,9 +24,9 @@ export default function Layout() {
             marginLeft: isMobile || isSmallScreen ? 0 : `${SIDEBAR_COLLAPSED_WIDTH}px`,
             minHeight: '100vh',
             bgcolor: theme.background.deepest,
-            // 移动端使用 16px 内边距，并为顶部汉堡菜单留出空间
+            // 移动端使用 16px 内边距，并为顶部导航栏留出空间 (56px + 16px)
             p: isMobile || isSmallScreen ? 2 : 3,
-            pt: isMobile || isSmallScreen ? 7 : 3,
+            pt: isMobile || isSmallScreen ? '72px' : 3,
           }}
         >
           <Outlet />
