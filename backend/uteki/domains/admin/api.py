@@ -779,6 +779,78 @@ async def delete_data_source_config(
 
 
 # ============================================================================
+# Debug Routes
+# ============================================================================
+
+
+@router.post("/debug/migrate-users-table", summary="迁移用户表添加OAuth字段")
+async def migrate_users_table(session: AsyncSession = Depends(get_db_session)):
+    """
+    迁移用户表，添加OAuth相关字段
+    - oauth_provider
+    - oauth_id
+    - avatar_url
+    """
+    from sqlalchemy import text
+
+    migrations = [
+        # 添加 oauth_provider 列（如果不存在）
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_schema = 'admin' AND table_name = 'users'
+                          AND column_name = 'oauth_provider') THEN
+                ALTER TABLE admin.users ADD COLUMN oauth_provider VARCHAR(50) DEFAULT 'local';
+            END IF;
+        END $$;
+        """,
+        # 添加 oauth_id 列（如果不存在）
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_schema = 'admin' AND table_name = 'users'
+                          AND column_name = 'oauth_id') THEN
+                ALTER TABLE admin.users ADD COLUMN oauth_id VARCHAR(255);
+            END IF;
+        END $$;
+        """,
+        # 添加 avatar_url 列（如果不存在）
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_schema = 'admin' AND table_name = 'users'
+                          AND column_name = 'avatar_url') THEN
+                ALTER TABLE admin.users ADD COLUMN avatar_url VARCHAR(500);
+            END IF;
+        END $$;
+        """,
+        # 创建索引（如果不存在）
+        """
+        CREATE INDEX IF NOT EXISTS idx_users_oauth ON admin.users (oauth_provider, oauth_id);
+        """,
+    ]
+
+    results = []
+    for sql in migrations:
+        try:
+            await session.execute(text(sql))
+            results.append({"sql": sql[:50] + "...", "status": "success"})
+        except Exception as e:
+            results.append({"sql": sql[:50] + "...", "status": "error", "error": str(e)})
+
+    await session.commit()
+
+    return {
+        "status": "completed",
+        "message": "Users table migration completed",
+        "results": results
+    }
+
+
+# ============================================================================
 # System Health Check Routes
 # ============================================================================
 
