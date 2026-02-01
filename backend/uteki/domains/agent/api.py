@@ -470,6 +470,46 @@ async def research_stream(request: ResearchRequest):
 
 
 @router.get(
+    "/debug/db-test",
+    summary="数据库连接测试",
+)
+async def debug_db_test(session: AsyncSession = Depends(get_db_session)):
+    """测试数据库基本操作"""
+    try:
+        from sqlalchemy import text
+
+        # 测试 1: 简单查询
+        result = await session.execute(text("SELECT 1 as test"))
+        test_val = result.scalar()
+
+        # 测试 2: 检查 schemas
+        schema_result = await session.execute(
+            text("SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('admin', 'agent', 'auth')")
+        )
+        schemas = [row[0] for row in schema_result.fetchall()]
+
+        # 测试 3: 检查表
+        table_result = await session.execute(
+            text("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('admin', 'agent', 'auth')")
+        )
+        tables = [f"{row[0]}.{row[1]}" for row in table_result.fetchall()]
+
+        return {
+            "status": "ok",
+            "test_query": test_val,
+            "schemas": schemas,
+            "tables": tables
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
+@router.get(
     "/research/health",
     summary="Deep Research 健康检查",
 )
