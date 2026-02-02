@@ -412,8 +412,8 @@ export default function HoverSidebar() {
           left: 0,
           width: `${SIDEBAR_COLLAPSED_WIDTH}px`,
           height: '100%',
-          background: theme.background.deepest, // #0a0a0a
-          borderRight: `1px solid ${theme.border.subtle}`,
+          background: '#181818', // 匹配原项目收起状态背景
+          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
           transition: 'all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)',
           display: 'flex',
           alignItems: 'flex-start',
@@ -421,8 +421,8 @@ export default function HoverSidebar() {
           paddingTop: '20px',
           zIndex: 1301,
           '&:hover': {
-            borderRight: `1px solid rgba(255, 255, 255, 0.1)`,
-            background: theme.background.secondary,
+            borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+            background: '#303030', // 匹配原项目 hover 状态
             '& .menu-icon': {
               color: theme.brand.primary,
               transform: 'scale(1.1)',
@@ -435,7 +435,7 @@ export default function HoverSidebar() {
             className="menu-icon"
             sx={{
               fontSize: '2.5rem',
-              color: theme.text.secondary,
+              color: 'rgba(255, 255, 255, 0.7)', // 匹配原项目图标颜色
               transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
               cursor: 'pointer',
               padding: 1.5,
@@ -444,7 +444,7 @@ export default function HoverSidebar() {
               '&:hover': {
                 backgroundColor: 'rgba(255, 255, 255, 0.08)',
                 borderColor: 'rgba(255, 255, 255, 0.12)',
-                color: theme.text.primary,
+                color: 'rgba(255, 255, 255, 0.95)',
                 transform: 'scale(1.05)',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
               },

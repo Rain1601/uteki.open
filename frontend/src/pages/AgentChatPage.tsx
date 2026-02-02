@@ -567,9 +567,14 @@ export default function AgentChatPage() {
             backgroundColor: 'rgba(255, 255, 255, 0.04)',
             color: 'rgba(255, 255, 255, 0.7)',
             '&:hover': {
+              transform: 'translateY(-1px)',
               backgroundColor: 'rgba(255, 255, 255, 0.08)',
               borderColor: 'rgba(255, 255, 255, 0.15)',
               color: 'rgba(255, 255, 255, 0.9)',
+              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), 0 3px 10px rgba(0, 0, 0, 0.1)',
+            },
+            '&:active': {
+              transform: 'translateY(0)',
             },
           }}
         >
@@ -604,9 +609,14 @@ export default function AgentChatPage() {
             backgroundColor: 'rgba(255, 255, 255, 0.06)',
             color: 'rgba(255, 255, 255, 0.8)',
             '&:hover': {
+              transform: 'translateY(-1px)',
               backgroundColor: 'rgba(255, 255, 255, 0.1)',
               borderColor: 'rgba(255, 255, 255, 0.2)',
               color: 'rgba(255, 255, 255, 0.95)',
+              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), 0 3px 10px rgba(0, 0, 0, 0.1)',
+            },
+            '&:active': {
+              transform: 'translateY(0)',
             },
           }}
         >
@@ -656,12 +666,13 @@ export default function AgentChatPage() {
             {/* 标题 */}
             <Typography
               sx={{
-                fontSize: isMobile || isSmallScreen ? '1.5rem' : '2.5rem',
+                fontSize: isMobile || isSmallScreen ? '1.5rem' : '2.2rem',
                 fontWeight: 400,
                 textAlign: 'center',
                 color: theme.text.primary,
                 letterSpacing: '0.02em',
                 px: isMobile || isSmallScreen ? 2 : 0,
+                fontFamily: 'Times New Roman, serif', // 匹配原项目字体
               }}
             >
               What do you want to know today?
@@ -680,24 +691,33 @@ export default function AgentChatPage() {
                 disabled={isStreaming}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    bgcolor: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '12px',
+                    bgcolor: '#2a2a2a', // 实色背景匹配原项目
+                    borderRadius: '16px',
                     fontSize: '1rem',
                     color: theme.text.primary,
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     '& fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.08)',
+                      borderColor: 'rgba(255, 255, 255, 0.12)',
                       borderWidth: '1px',
                     },
+                    '&:hover': {
+                      bgcolor: '#303030',
+                    },
                     '&:hover fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.12)',
+                      borderColor: 'rgba(255, 255, 255, 0.15)',
+                    },
+                    '&.Mui-focused': {
+                      bgcolor: '#333333',
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1)',
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: theme.brand.primary,
+                      borderColor: 'rgba(255, 255, 255, 0.2)',
                       borderWidth: '1px',
                     },
                   },
                   '& .MuiInputBase-input': {
-                    py: 2,
+                    py: 2.5,
                     px: 3,
                     color: theme.text.primary,
                     '&::placeholder': {
