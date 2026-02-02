@@ -563,15 +563,15 @@ export default function AgentChatPage() {
             borderRadius: isMobile || isSmallScreen ? '50%' : '12px',
             transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            backgroundColor: 'rgba(255, 255, 255, 0.04)',
-            color: 'rgba(255, 255, 255, 0.7)',
+            border: `1px solid ${theme.border.subtle}`,
+            backgroundColor: theme.background.secondary,
+            color: theme.text.muted,
             '&:hover': {
               transform: 'translateY(-1px)',
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              borderColor: 'rgba(255, 255, 255, 0.15)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), 0 3px 10px rgba(0, 0, 0, 0.1)',
+              backgroundColor: theme.background.tertiary,
+              borderColor: theme.border.default,
+              color: theme.text.primary,
+              boxShadow: theme.effects.shadow.md,
             },
             '&:active': {
               transform: 'translateY(0)',
@@ -605,15 +605,15 @@ export default function AgentChatPage() {
             borderRadius: isMobile || isSmallScreen ? '50%' : '12px',
             transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            backgroundColor: 'rgba(255, 255, 255, 0.06)',
-            color: 'rgba(255, 255, 255, 0.8)',
+            border: `1px solid ${theme.border.default}`,
+            backgroundColor: theme.background.tertiary,
+            color: theme.text.secondary,
             '&:hover': {
               transform: 'translateY(-1px)',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              borderColor: 'rgba(255, 255, 255, 0.2)',
-              color: 'rgba(255, 255, 255, 0.95)',
-              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), 0 3px 10px rgba(0, 0, 0, 0.1)',
+              backgroundColor: theme.background.hover,
+              borderColor: theme.border.hover,
+              color: theme.text.primary,
+              boxShadow: theme.effects.shadow.md,
             },
             '&:active': {
               transform: 'translateY(0)',
@@ -691,28 +691,28 @@ export default function AgentChatPage() {
                 disabled={isStreaming}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    bgcolor: '#2a2a2a', // 实色背景匹配原项目
+                    bgcolor: theme.background.secondary,
                     borderRadius: '16px',
                     fontSize: '1rem',
                     color: theme.text.primary,
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     '& fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.12)',
+                      borderColor: theme.border.default,
                       borderWidth: '1px',
                     },
                     '&:hover': {
-                      bgcolor: '#303030',
+                      bgcolor: theme.background.tertiary,
                     },
                     '&:hover fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.15)',
+                      borderColor: theme.border.hover,
                     },
                     '&.Mui-focused': {
-                      bgcolor: '#333333',
+                      bgcolor: theme.background.hover,
                       transform: 'translateY(-2px)',
-                      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1)',
+                      boxShadow: theme.effects.shadow.lg,
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.2)',
+                      borderColor: theme.border.active,
                       borderWidth: '1px',
                     },
                   },
@@ -760,13 +760,13 @@ export default function AgentChatPage() {
                   sx={{
                     padding: '12px 20px',
                     backgroundColor: researchMode
-                      ? 'linear-gradient(135deg, #1a2f4a 0%, #243b5e 100%)'
-                      : 'rgba(255, 255, 255, 0.03)',
+                      ? theme.button.interactive.bg
+                      : theme.background.secondary,
                     border: researchMode
-                      ? '1px solid #2d4a6f'
-                      : '1px solid rgba(255, 255, 255, 0.06)',
+                      ? `1px solid ${theme.brand.primary}`
+                      : `1px solid ${theme.border.subtle}`,
                     borderRadius: '24px',
-                    color: researchMode ? '#7d9bb8' : 'rgba(255, 255, 255, 0.5)',
+                    color: researchMode ? theme.brand.muted : theme.text.muted,
                     fontSize: '14px',
                     fontWeight: 500,
                     cursor: 'pointer',
@@ -777,14 +777,14 @@ export default function AgentChatPage() {
                     letterSpacing: '0.3px',
                     textTransform: 'none',
                     boxShadow: researchMode
-                      ? '0 0 15px rgba(125, 155, 184, 0.1), inset 0 1px 0 rgba(125, 155, 184, 0.15)'
+                      ? `0 0 15px ${theme.brand.muted}26`
                       : 'none',
                     '&:hover': {
                       backgroundColor: researchMode
-                        ? 'linear-gradient(135deg, #1e3651 0%, #294268 100%)'
-                        : 'rgba(255, 255, 255, 0.06)',
-                      borderColor: researchMode ? '#355577' : 'rgba(255, 255, 255, 0.1)',
-                      color: researchMode ? '#8ca8c2' : 'rgba(255, 255, 255, 0.8)',
+                        ? theme.button.interactive.hover
+                        : theme.background.tertiary,
+                      borderColor: researchMode ? theme.brand.hover : theme.border.default,
+                      color: researchMode ? theme.brand.mutedDark : theme.text.secondary,
                     },
                   }}
                 >
@@ -799,9 +799,9 @@ export default function AgentChatPage() {
                     alignItems: 'center',
                     gap: 1,
                     padding: '4px 8px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    backgroundColor: theme.background.secondary,
                     borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    border: `1px solid ${theme.border.subtle}`,
                   }}
                 >
                   {modelOptions.map((model) => (
@@ -838,7 +838,7 @@ export default function AgentChatPage() {
                               selectedModelId === model.id
                                 ? 'rgba(144, 202, 249, 0.15)'
                                 : model.available
-                                ? 'rgba(255, 255, 255, 0.08)'
+                                ? theme.background.hover
                                 : 'transparent',
                           },
                         }}
@@ -949,13 +949,13 @@ export default function AgentChatPage() {
                 sx={{
                   padding: '12px 20px',
                   backgroundColor: researchMode
-                    ? 'linear-gradient(135deg, #1a2f4a 0%, #243b5e 100%)'
-                    : 'rgba(255, 255, 255, 0.03)',
+                    ? theme.button.interactive.bg
+                    : theme.background.secondary,
                   border: researchMode
-                    ? '1px solid #2d4a6f'
-                    : '1px solid rgba(255, 255, 255, 0.06)',
+                    ? `1px solid ${theme.brand.primary}`
+                    : `1px solid ${theme.border.subtle}`,
                   borderRadius: '24px',
-                  color: researchMode ? '#7d9bb8' : 'rgba(255, 255, 255, 0.5)',
+                  color: researchMode ? theme.brand.muted : theme.text.muted,
                   fontSize: '14px',
                   fontWeight: 500,
                   cursor: 'pointer',
@@ -966,14 +966,14 @@ export default function AgentChatPage() {
                   letterSpacing: '0.3px',
                   textTransform: 'none',
                   boxShadow: researchMode
-                    ? '0 0 15px rgba(125, 155, 184, 0.1), inset 0 1px 0 rgba(125, 155, 184, 0.15)'
+                    ? `0 0 15px ${theme.brand.muted}26`
                     : 'none',
                   '&:hover': {
                     backgroundColor: researchMode
-                      ? 'linear-gradient(135deg, #1e3651 0%, #294268 100%)'
-                      : 'rgba(255, 255, 255, 0.06)',
-                    borderColor: researchMode ? '#355577' : 'rgba(255, 255, 255, 0.1)',
-                    color: researchMode ? '#8ca8c2' : 'rgba(255, 255, 255, 0.8)',
+                      ? theme.button.interactive.hover
+                      : theme.background.tertiary,
+                    borderColor: researchMode ? theme.brand.hover : theme.border.default,
+                    color: researchMode ? theme.brand.mutedDark : theme.text.secondary,
                   },
                 }}
               >
@@ -988,9 +988,9 @@ export default function AgentChatPage() {
                   alignItems: 'center',
                   gap: 1,
                   padding: '4px 8px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  backgroundColor: theme.background.secondary,
                   borderRadius: '12px',
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  border: `1px solid ${theme.border.subtle}`,
                 }}
               >
                 {modelOptions.map((model) => (
@@ -1027,7 +1027,7 @@ export default function AgentChatPage() {
                             selectedModelId === model.id
                               ? 'rgba(144, 202, 249, 0.15)'
                               : model.available
-                              ? 'rgba(255, 255, 255, 0.08)'
+                              ? theme.background.hover
                               : 'transparent',
                         },
                       }}
