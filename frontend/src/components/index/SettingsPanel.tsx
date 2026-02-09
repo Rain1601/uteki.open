@@ -4,7 +4,6 @@ import {
   Typography,
   Button,
   TextField,
-  Grid,
   Chip,
   Table,
   TableBody,
@@ -32,6 +31,7 @@ import {
 import { useTheme } from '../../theme/ThemeProvider';
 import LoadingDots from '../LoadingDots';
 import { useToast } from '../Toast';
+import KlineChart from './KlineChart';
 import {
   WatchlistItem,
   PromptVersion,
@@ -43,6 +43,8 @@ import {
   fetchCurrentPrompt,
   updatePrompt,
   fetchPromptHistory,
+  activatePromptVersion,
+  deletePromptVersion,
   fetchSchedules,
   createSchedule,
   updateSchedule,
@@ -67,7 +69,7 @@ export default function SettingsPanel() {
           { key: 'watchlist', label: 'Watchlist' },
           { key: 'prompt', label: 'System Prompt' },
           { key: 'schedules', label: 'Schedules' },
-          { key: 'debug', label: 'Debug' },
+          ...(import.meta.env.DEV ? [{ key: 'debug', label: 'Debug' }] : []),
         ].map(({ key, label }) => (
           <Chip
             key={key}
@@ -88,7 +90,7 @@ export default function SettingsPanel() {
       {section === 'watchlist' && <WatchlistSection theme={theme} isDark={isDark} showToast={showToast} />}
       {section === 'prompt' && <PromptSection theme={theme} isDark={isDark} showToast={showToast} />}
       {section === 'schedules' && <ScheduleSection theme={theme} isDark={isDark} showToast={showToast} />}
-      {section === 'debug' && <DebugSection theme={theme} isDark={isDark} showToast={showToast} />}
+      {import.meta.env.DEV && section === 'debug' && <DebugSection theme={theme} isDark={isDark} showToast={showToast} />}
     </Box>
   );
 }
@@ -100,18 +102,25 @@ function WatchlistSection({ theme, isDark, showToast }: { theme: any; isDark: bo
   const [loading, setLoading] = useState(true);
   const [newSymbol, setNewSymbol] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetchWatchlist();
-      if (res.success && res.data) setItems(res.data);
+      if (res.success && res.data) {
+        setItems(res.data);
+        // Auto-select first symbol if none selected
+        if (!selectedSymbol && res.data.length > 0) {
+          setSelectedSymbol(res.data[0].symbol);
+        }
+      }
     } catch {
       /* ignore */
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedSymbol]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -123,6 +132,7 @@ function WatchlistSection({ theme, isDark, showToast }: { theme: any; isDark: bo
       if (res.success) {
         showToast(`Added ${sym}`, 'success');
         setNewSymbol('');
+        setSelectedSymbol(sym);
         load();
       } else {
         showToast(res.error || 'Failed to add', 'error');
@@ -132,10 +142,14 @@ function WatchlistSection({ theme, isDark, showToast }: { theme: any; isDark: bo
     }
   };
 
-  const handleRemove = async (symbol: string) => {
+  const handleRemove = async (symbol: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       await removeFromWatchlist(symbol);
       showToast(`Removed ${symbol}`, 'success');
+      if (selectedSymbol === symbol) {
+        setSelectedSymbol(null);
+      }
       load();
     } catch {
       showToast('Failed to remove', 'error');
@@ -154,60 +168,113 @@ function WatchlistSection({ theme, isDark, showToast }: { theme: any; isDark: bo
     }
   };
 
-  const cardBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
-  const cardBorder = `1px solid ${theme.border.subtle}`;
-
   return (
-    <Box>
-      <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
-        <TextField
-          size="small"
-          placeholder="Add symbol (e.g. VOO)"
-          value={newSymbol}
-          onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          InputProps={{ sx: { color: theme.text.primary, fontSize: 13 } }}
-          sx={{ width: 180 }}
-        />
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={handleAdd}
-          disabled={!newSymbol.trim()}
-          sx={{ bgcolor: theme.brand.primary, color: '#fff', textTransform: 'none', fontSize: 13, fontWeight: 600, borderRadius: 2, '&:hover': { bgcolor: theme.brand.hover } }}
-        >
-          Add
-        </Button>
+    <Box sx={{ display: 'flex', gap: 2, height: 'calc(100vh - 200px)', minHeight: 500 }}>
+      {/* Left: Symbol List */}
+      <Box
+        sx={{
+          width: 240,
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRight: `1px solid ${theme.border.subtle}`,
+          pr: 2,
+        }}
+      >
+        {/* Add symbol input */}
+        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+          <TextField
+            size="small"
+            placeholder="Add (e.g. VOO)"
+            value={newSymbol}
+            onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            InputProps={{ sx: { color: theme.text.primary, fontSize: 12 } }}
+            sx={{ flex: 1 }}
+          />
+          <IconButton
+            size="small"
+            onClick={handleAdd}
+            disabled={!newSymbol.trim()}
+            sx={{ bgcolor: theme.brand.primary, color: '#fff', borderRadius: 1, '&:hover': { bgcolor: theme.brand.hover }, '&.Mui-disabled': { bgcolor: theme.border.subtle } }}
+          >
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Box>
+
+        {/* Refresh button */}
         <Button
           size="small"
           startIcon={refreshing ? undefined : <RefreshIcon />}
           onClick={handleRefresh}
           disabled={refreshing}
-          sx={{ color: theme.brand.primary, textTransform: 'none', fontSize: 13 }}
+          sx={{ color: theme.brand.primary, textTransform: 'none', fontSize: 12, mb: 2, justifyContent: 'flex-start' }}
         >
-          {refreshing ? <LoadingDots text="Refreshing" fontSize={12} /> : 'Refresh Data'}
+          {refreshing ? <LoadingDots text="Refreshing" fontSize={11} /> : 'Refresh Data'}
         </Button>
-      </Box>
 
-      {loading ? (
-        <LoadingDots text="Loading watchlist" fontSize={13} />
-      ) : (
-        <Grid container spacing={1.5}>
-          {items.map((item) => (
-            <Grid item xs={6} sm={4} md={3} key={item.id}>
-              <Box sx={{ p: 1.5, bgcolor: cardBg, border: cardBorder, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {/* Symbol list */}
+        <Box sx={{ flex: 1, overflow: 'auto' }}>
+          {loading ? (
+            <LoadingDots text="Loading" fontSize={12} />
+          ) : items.length === 0 ? (
+            <Typography sx={{ fontSize: 12, color: theme.text.muted, py: 2 }}>No symbols. Add one above.</Typography>
+          ) : (
+            items.map((item) => (
+              <Box
+                key={item.id}
+                onClick={() => setSelectedSymbol(item.symbol)}
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  px: 1.5,
+                  py: 1,
+                  mb: 0.5,
+                  borderRadius: 1,
+                  cursor: 'pointer',
+                  bgcolor: selectedSymbol === item.symbol
+                    ? isDark ? 'rgba(100,149,237,0.15)' : 'rgba(100,149,237,0.1)'
+                    : 'transparent',
+                  border: selectedSymbol === item.symbol
+                    ? `1px solid rgba(100,149,237,0.3)`
+                    : '1px solid transparent',
+                  '&:hover': {
+                    bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                  },
+                }}
+              >
                 <Box>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.text.primary }}>{item.symbol}</Typography>
-                  {item.etf_type && <Typography sx={{ fontSize: 11, color: theme.text.muted }}>{item.etf_type}</Typography>}
+                  <Typography
+                    sx={{
+                      fontSize: 13,
+                      fontWeight: selectedSymbol === item.symbol ? 600 : 500,
+                      color: selectedSymbol === item.symbol ? theme.brand.primary : theme.text.primary,
+                    }}
+                  >
+                    {item.symbol}
+                  </Typography>
+                  {item.etf_type && (
+                    <Typography sx={{ fontSize: 10, color: theme.text.muted }}>{item.etf_type}</Typography>
+                  )}
                 </Box>
-                <IconButton size="small" onClick={() => handleRemove(item.symbol)} sx={{ color: theme.text.muted, '&:hover': { color: '#f44336' } }}>
-                  <DeleteIcon fontSize="small" />
+                <IconButton
+                  size="small"
+                  onClick={(e) => handleRemove(item.symbol, e)}
+                  sx={{ color: theme.text.muted, opacity: 0.5, '&:hover': { color: '#f44336', opacity: 1 } }}
+                >
+                  <DeleteIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Box>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+            ))
+          )}
+        </Box>
+      </Box>
+
+      {/* Right: K-Line Chart */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <KlineChart symbol={selectedSymbol} onError={(msg) => showToast(msg, 'error')} />
+      </Box>
     </Box>
   );
 }
@@ -222,15 +289,18 @@ function PromptSection({ theme, isDark, showToast }: { theme: any; isDark: boole
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    Promise.all([fetchCurrentPrompt(), fetchPromptHistory()]).then(([curRes, histRes]) => {
-      if (curRes.success && curRes.data) {
-        setCurrent(curRes.data);
-        setContent(curRes.data.content);
-      }
-      if (histRes.success && histRes.data) setHistory(histRes.data);
-    }).catch(() => {}).finally(() => setLoading(false));
+  const reload = useCallback(async () => {
+    const [curRes, histRes] = await Promise.all([fetchCurrentPrompt(), fetchPromptHistory()]);
+    if (curRes.success && curRes.data) {
+      setCurrent(curRes.data);
+      setContent(curRes.data.content);
+    }
+    if (histRes.success && histRes.data) setHistory(histRes.data);
   }, []);
+
+  useEffect(() => {
+    reload().catch(() => {}).finally(() => setLoading(false));
+  }, [reload]);
 
   const handleSave = async () => {
     if (!content.trim() || !description.trim()) return;
@@ -238,12 +308,9 @@ function PromptSection({ theme, isDark, showToast }: { theme: any; isDark: boole
     try {
       const res = await updatePrompt(content, description);
       if (res.success && res.data) {
-        setCurrent(res.data);
         showToast('Prompt updated', 'success');
         setDescription('');
-        // reload history
-        const histRes = await fetchPromptHistory();
-        if (histRes.success && histRes.data) setHistory(histRes.data);
+        await reload();
       } else {
         showToast(res.error || 'Update failed', 'error');
       }
@@ -251,6 +318,34 @@ function PromptSection({ theme, isDark, showToast }: { theme: any; isDark: boole
       showToast(e.message || 'Update failed', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleActivate = async (versionId: string) => {
+    try {
+      const res = await activatePromptVersion(versionId);
+      if (res.success) {
+        showToast('Version activated', 'success');
+        await reload();
+      } else {
+        showToast('Activate failed', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Activate failed', 'error');
+    }
+  };
+
+  const handleDelete = async (versionId: string) => {
+    try {
+      const res = await deletePromptVersion(versionId);
+      if (res.success) {
+        showToast('Version deleted', 'success');
+        await reload();
+      } else {
+        showToast('Delete failed', 'error');
+      }
+    } catch (e: any) {
+      showToast(e?.response?.data?.detail || e.message || 'Delete failed', 'error');
     }
   };
 
@@ -325,12 +420,37 @@ function PromptSection({ theme, isDark, showToast }: { theme: any; isDark: boole
                   color: v.is_current ? '#4caf50' : theme.text.muted,
                 }}
               />
+              {v.is_current && (
+                <Chip label="current" size="small" sx={{ fontSize: 10, height: 18, bgcolor: 'rgba(76,175,80,0.1)', color: '#4caf50' }} />
+              )}
               <Typography sx={{ fontSize: 12, color: theme.text.secondary, flex: 1 }}>
                 {v.description}
               </Typography>
-              <Typography sx={{ fontSize: 11, color: theme.text.muted }}>
+              <Typography sx={{ fontSize: 11, color: theme.text.muted, mr: 1 }}>
                 {v.created_at ? new Date(v.created_at).toLocaleDateString() : ''}
               </Typography>
+              {!v.is_current && (
+                <>
+                  <Tooltip title="Set as current version">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); handleActivate(v.id); }}
+                      sx={{ color: theme.brand.primary, p: 0.5 }}
+                    >
+                      <RefreshIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete version">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(v.id); }}
+                      sx={{ color: '#f44336', p: 0.5 }}
+                    >
+                      <DeleteIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
             </Box>
           ))}
         </>

@@ -1,5 +1,11 @@
 // News types for NewsTimelinePage
 
+// Label type aliases
+export type ImportanceLevel = 'critical' | 'high' | 'medium' | 'low';
+// Support both bullish/bearish and positive/negative naming from different backend sources
+export type ImpactDirection = 'bullish' | 'bearish' | 'neutral' | 'positive' | 'negative';
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
 export interface NewsItem {
   id: string;
   source: string;
@@ -19,7 +25,10 @@ export interface NewsItem {
   // AI analysis fields (pre-loaded from backend)
   ai_analysis_status?: 'pending' | 'completed' | 'failed';
   ai_analysis?: string;
-  ai_impact?: 'positive' | 'negative' | 'neutral';
+  ai_impact?: ImpactDirection;
+  // Auto-labeling fields
+  importance_level?: ImportanceLevel;
+  impact_confidence?: ConfidenceLevel;
 }
 
 export interface NewsDataByDate {
@@ -49,20 +58,23 @@ export interface ArticleDetailResponse {
     author?: string;
     publish_time: string;
     url?: string;
+    importance_level?: ImportanceLevel;
+    ai_impact?: ImpactDirection;
+    impact_confidence?: ConfidenceLevel;
   };
 }
 
 export interface NewsAnalysisStreamData {
   content?: string;
   done?: boolean;
-  impact?: 'positive' | 'negative' | 'neutral';
+  impact?: ImpactDirection;
   analysis?: string;
   error?: string;
 }
 
 export interface AnalysisResult {
   loading: boolean;
-  impact?: 'positive' | 'negative' | 'neutral';
+  impact?: ImpactDirection;
   analysis?: string;
   streamContent?: string;
   error?: string | null;
@@ -72,4 +84,4 @@ export interface FeedbackState {
   userFeedback: 'like' | 'dislike' | null;
 }
 
-export type NewsFilterType = 'all' | 'important' | 'crypto' | 'stocks' | 'forex';
+export type NewsFilterType = 'all' | 'important' | 'crypto' | 'stocks' | 'forex' | 'critical' | 'high' | 'medium' | 'low';

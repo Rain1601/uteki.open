@@ -31,6 +31,15 @@ DEFAULT_SCHEDULES = [
         "task_type": "reflection",
         "config": {},
     },
+    {
+        "name": "daily_price_update",
+        "cron_expression": "0 5 * * *",  # UTC 5:00 = US market close + buffer
+        "task_type": "price_update",
+        "config": {
+            "validate_after_update": True,  # 更新后验证异常价格
+            "enable_backfill": True,        # 启用智能回填（补齐漏执行的数据）
+        },
+    },
 ]
 
 

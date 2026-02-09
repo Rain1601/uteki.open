@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from uteki.domains.news.models import NewsArticle
 from uteki.domains.agent.llm_adapter import LLMAdapterFactory, LLMProvider
+from uteki.common.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,14 @@ class NewsAnalysisService:
     def _get_llm_adapter(self):
         """获取 LLM adapter"""
         if self._llm_adapter is None:
-            self._llm_adapter = LLMAdapterFactory.create(LLMProvider.ANTHROPIC)
+            api_key = settings.anthropic_api_key
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY not configured")
+            self._llm_adapter = LLMAdapterFactory.create_adapter(
+                provider=LLMProvider.ANTHROPIC,
+                api_key=api_key,
+                model="claude-sonnet-4-20250514",
+            )
         return self._llm_adapter
 
     async def analyze_news_stream(

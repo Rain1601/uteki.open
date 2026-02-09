@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from uteki.common.database import get_session
-from uteki.domains.news.services import get_jeff_cox_service
+from uteki.domains.news.services import get_jeff_cox_service, get_translation_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -110,4 +110,116 @@ async def trigger_scrape(
 
     except Exception as e:
         logger.error(f"触发抓取失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jeff-cox/translate")
+async def translate_pending_articles(
+    limit: int = Query(10, ge=1, le=50, description="最多翻译多少篇"),
+    provider: str = Query("deepseek", description="翻译提供商: deepseek/qwen"),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    翻译待翻译的新闻文章
+
+    Returns:
+        翻译结果统计
+    """
+    try:
+        translation_service = get_translation_service(provider)
+        result = await translation_service.translate_pending_articles(session, limit)
+
+        return {
+            "success": True,
+            "provider": provider,
+            **result
+        }
+
+    except Exception as e:
+        logger.error(f"翻译失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jeff-cox/article/{article_id}/translate")
+async def translate_article(
+    article_id: str,
+    provider: str = Query("deepseek", description="翻译提供商: deepseek/qwen"),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    翻译单篇文章
+
+    Returns:
+        翻译结果
+    """
+    try:
+        translation_service = get_translation_service(provider)
+        result = await translation_service.translate_article(article_id, session)
+
+        return {
+            "success": True,
+            "provider": provider,
+            **result
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"翻译文章失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jeff-cox/label")
+async def label_unlabeled_articles(
+    limit: int = Query(10, ge=1, le=50, description="最多标签多少篇"),
+    provider: str = Query("deepseek", description="LLM 提供商: deepseek/qwen"),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    为已翻译但未标签的文章生成标签
+
+    Returns:
+        标签结果统计
+    """
+    try:
+        translation_service = get_translation_service(provider)
+        result = await translation_service.label_unlabeled_articles(session, limit)
+
+        return {
+            "success": True,
+            "provider": provider,
+            **result
+        }
+
+    except Exception as e:
+        logger.error(f"批量标签失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/jeff-cox/article/{article_id}/label")
+async def label_article(
+    article_id: str,
+    provider: str = Query("deepseek", description="LLM 提供商: deepseek/qwen"),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    为单篇文章生成标签
+
+    Returns:
+        标签结果
+    """
+    try:
+        translation_service = get_translation_service(provider)
+        result = await translation_service.label_article(article_id, session)
+
+        return {
+            "success": True,
+            "provider": provider,
+            **result
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"标签文章失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

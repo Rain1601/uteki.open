@@ -108,6 +108,21 @@ async def refresh_data(
     return {"success": True, "data": results}
 
 
+@router.post("/data/validate", summary="验证数据连续性")
+async def validate_data(
+    symbol: Optional[str] = Query(None, description="Symbol to validate, or all if omitted"),
+    session: AsyncSession = Depends(get_db_session),
+    data_service: DataService = Depends(get_data_service),
+):
+    """检测缺失的交易日（排除周末），返回 missing_dates 数组"""
+    if symbol:
+        result = await data_service.validate_data_continuity(symbol, session)
+        return {"success": True, "data": result}
+    else:
+        results = await data_service.validate_all_watchlist(session)
+        return {"success": True, "data": results}
+
+
 # ══════════════════════════════════════════
 # Backtest
 # ══════════════════════════════════════════
@@ -184,6 +199,32 @@ async def get_prompt_history(
     return {"success": True, "data": history}
 
 
+@router.put("/prompt/{version_id}/activate", summary="切换当前 Prompt 版本")
+async def activate_prompt_version(
+    version_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    prompt_service: PromptService = Depends(get_prompt_service),
+):
+    try:
+        version = await prompt_service.activate_version(version_id, session)
+        return {"success": True, "data": version}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/prompt/{version_id}", summary="删除 Prompt 版本")
+async def delete_prompt_version(
+    version_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    prompt_service: PromptService = Depends(get_prompt_service),
+):
+    try:
+        await prompt_service.delete_version(version_id, session)
+        return {"success": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ══════════════════════════════════════════
 # Memory
 # ══════════════════════════════════════════
@@ -250,15 +291,41 @@ async def run_arena(
                 harness["prompt_version_id"], session
             )
 
+    # 4. 获取 prompt 版本号
+    prompt_ver = await prompt_service.get_by_id(harness["prompt_version_id"], session)
+    prompt_version_str = prompt_ver["version"] if prompt_ver else None
+
     return {
         "success": True,
         "data": {
             "harness_id": harness["id"],
             "harness_type": harness["harness_type"],
             "prompt_version_id": harness["prompt_version_id"],
+            "prompt_version": prompt_version_str,
             "models": model_ios,
         },
     }
+
+
+@router.get("/arena/timeline", summary="获取 Arena 时间线图表数据")
+async def get_arena_timeline(
+    limit: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_db_session),
+    arena_service: ArenaService = Depends(get_arena_service),
+):
+    timeline = await arena_service.get_arena_timeline(session, limit=limit)
+    return {"success": True, "data": timeline}
+
+
+@router.get("/arena/history", summary="获取 Arena 运行历史")
+async def get_arena_history(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_db_session),
+    arena_service: ArenaService = Depends(get_arena_service),
+):
+    history = await arena_service.get_arena_history(session, limit=limit, offset=offset)
+    return {"success": True, "data": history}
 
 
 @router.get("/arena/{harness_id}", summary="获取 Arena 结果")
@@ -582,6 +649,41 @@ async def trigger_schedule(
             results[f"{days}d"] = r
         await scheduler_service.update_run_status(task_id, "success", session)
         return {"success": True, "data": results}
+
+    elif task_data["task_type"] == "price_update":
+        # 使用健壮更新：带重试、智能回填、异常检测
+        results = await data_service.robust_update_all(
+            session,
+            validate=config.get("validate_after_update", True),
+            backfill=config.get("enable_backfill", True),
+        )
+
+        # 判断任务状态
+        has_failures = len(results["failed"]) > 0
+        has_anomalies = len(results["anomalies"]) > 0
+
+        if has_failures:
+            status = "partial_failure"
+            logger.warning(f"Price update partial failure: {results['failed']}")
+        elif has_anomalies:
+            status = "success_with_warnings"
+            logger.warning(f"Price update completed with {len(results['anomalies'])} anomalies")
+        else:
+            status = "success"
+
+        await scheduler_service.update_run_status(task_id, status, session)
+
+        return {
+            "success": not has_failures,
+            "data": {
+                "status": status,
+                "success_count": len(results["success"]),
+                "failed": results["failed"],
+                "backfilled": results["backfilled"],
+                "anomalies": results["anomalies"],
+                "total_records": results["total_records"],
+            },
+        }
 
     raise HTTPException(400, f"Unknown task type: {task_data['task_type']}")
 

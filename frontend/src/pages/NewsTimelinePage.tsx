@@ -19,10 +19,11 @@ import {
   ThumbDown as ThumbDownIcon,
 } from '@mui/icons-material';
 import { useTheme } from '../theme/ThemeProvider';
-import { getMonthlyNews, analyzeNewsStream } from '../api/news';
+import { getMonthlyNews, analyzeNewsStream, NewsSource } from '../api/news';
 import ArticleDetailDialog from '../components/ArticleDetailDialog';
 import LoadingDots from '../components/LoadingDots';
-import { NewsItem, NewsDataByDate, NewsFilterType, AnalysisResult } from '../types/news';
+import { NewsItem, NewsDataByDate, NewsFilterType, AnalysisResult, ImportanceLevel, ImpactDirection, ConfidenceLevel } from '../types/news';
+import { NewsLabelStrip } from '../components/news/NewsLabelBadges';
 
 interface CalendarDay {
   day: number;
@@ -52,6 +53,7 @@ export default function NewsTimelinePage() {
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState(today);
   const [activeFilter, setActiveFilter] = useState<NewsFilterType>('all');
+  const [newsSource, setNewsSource] = useState<NewsSource>('jeff-cox');
   const [isScrolling, setIsScrolling] = useState(false);
   const [newsData, setNewsData] = useState<NewsDataByDate>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -115,9 +117,9 @@ export default function NewsTimelinePage() {
   }, []);
 
   // Load monthly news
-  const loadMonthlyNews = useCallback(async (year: number, month: number, append = false) => {
+  const loadMonthlyNews = useCallback(async (year: number, month: number, append = false, force = false) => {
     const monthKey = `${year}-${month}`;
-    if (loadedMonths.has(monthKey)) return;
+    if (!force && loadedMonths.has(monthKey)) return;
 
     if (append) {
       setIsLoadingMore(true);
@@ -127,7 +129,7 @@ export default function NewsTimelinePage() {
     setError(null);
 
     try {
-      const response = await getMonthlyNews(year, month + 1, activeFilter);
+      const response = await getMonthlyNews(year, month + 1, activeFilter, newsSource);
       if (response.success) {
         setNewsData((prev) => ({ ...prev, ...response.data }));
         setLoadedMonths((prev) => new Set([...prev, monthKey]));
@@ -164,7 +166,7 @@ export default function NewsTimelinePage() {
         setIsLoading(false);
       }
     }
-  }, [activeFilter, loadedMonths]);
+  }, [activeFilter, loadedMonths, newsSource]);
 
   // Load adjacent month
   const loadAdjacentMonth = useCallback((direction: 'prev' | 'next') => {
@@ -201,16 +203,17 @@ export default function NewsTimelinePage() {
     }
   }, [currentYear, currentMonth]);
 
-  // Reload when filter changes
+  // Reload when filter or source changes
   useEffect(() => {
     setNewsData({});
     setLoadedMonths(new Set());
-    loadMonthlyNews(currentYear, currentMonth, false);
+    setAnalysisResults({});
+    loadMonthlyNews(currentYear, currentMonth, false, true);
     setTimeout(() => {
       loadAdjacentMonth('prev');
       loadAdjacentMonth('next');
     }, 500);
-  }, [activeFilter]);
+  }, [activeFilter, newsSource]);
 
   // Navigation functions
   const previousMonth = () => {
@@ -279,6 +282,21 @@ export default function NewsTimelinePage() {
   const hasNews = (dateStr: string): boolean => newsData[dateStr]?.length > 0;
   const getNewsCount = (dateStr: string): number => newsData[dateStr]?.length || 0;
 
+  // Check if date has critical-importance articles
+  const hasCriticalNews = (dateStr: string): boolean => {
+    const articles = newsData[dateStr] || [];
+    return articles.some((article) => article.importance_level === 'critical');
+  };
+
+  // Get news density level for visual indicator (0=none, 1=low, 2=medium, 3=high)
+  const getNewsDensity = (dateStr: string): number => {
+    const count = getNewsCount(dateStr);
+    if (count === 0) return 0;
+    if (count < 3) return 1;
+    if (count < 5) return 2;
+    return 3; // 5+ articles = high density
+  };
+
   // Format date label
   const formatDateLabel = (dateStr: string): string => {
     const [, month, day] = dateStr.split('-');
@@ -296,6 +314,12 @@ export default function NewsTimelinePage() {
         const filtered = dayNews.filter((item) => {
           if (activeFilter === 'all') return true;
           if (activeFilter === 'important') return item.important;
+          // Importance level filters
+          if (activeFilter === 'critical') return item.importance_level === 'critical';
+          if (activeFilter === 'high') return item.importance_level === 'high';
+          if (activeFilter === 'medium') return item.importance_level === 'medium';
+          if (activeFilter === 'low') return item.importance_level === 'low';
+          // Category filters
           if (activeFilter === 'crypto')
             return item.tags.some((tag) => ['Bitcoin', 'Crypto', 'BTC', 'Ethereum', 'ETH'].includes(tag));
           if (activeFilter === 'stocks')
@@ -321,13 +345,20 @@ export default function NewsTimelinePage() {
     sortedDates.forEach((dateStr) => {
       const dayNews = newsData[dateStr] || [];
       dayNews.forEach((item) => {
-        if (
+        const matchesFilter =
           activeFilter === 'all' ||
           (activeFilter === 'important' && item.important) ||
+          // Importance level filters
+          (activeFilter === 'critical' && item.importance_level === 'critical') ||
+          (activeFilter === 'high' && item.importance_level === 'high') ||
+          (activeFilter === 'medium' && item.importance_level === 'medium') ||
+          (activeFilter === 'low' && item.importance_level === 'low') ||
+          // Category filters
           (activeFilter === 'crypto' && item.tags.some((tag) => ['Bitcoin', 'Crypto', 'BTC', 'Ethereum', 'ETH'].includes(tag))) ||
           (activeFilter === 'stocks' && item.tags.some((tag) => ['Stocks', 'Market', 'NASDAQ', 'S&P', 'Tech'].includes(tag))) ||
-          (activeFilter === 'forex' && item.tags.some((tag) => ['Forex', 'USD', 'EUR', 'GBP', 'JPY', 'CNY'].includes(tag)))
-        ) {
+          (activeFilter === 'forex' && item.tags.some((tag) => ['Forex', 'USD', 'EUR', 'GBP', 'JPY', 'CNY'].includes(tag)));
+
+        if (matchesFilter) {
           allTitles.push({ ...item, dateStr });
         }
       });
@@ -710,6 +741,17 @@ export default function NewsTimelinePage() {
               const isSelected = dayData.date.toDateString() === selectedDate.toDateString();
               const hasNewsData = hasNews(dayData.dateStr);
               const newsCount = getNewsCount(dayData.dateStr);
+              const hasCritical = hasCriticalNews(dayData.dateStr);
+              const density = getNewsDensity(dayData.dateStr);
+
+              // Density-based background intensity
+              const densityBg = density === 0
+                ? (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)')
+                : density === 1
+                  ? `${theme.brand.primary}08`
+                  : density === 2
+                    ? `${theme.brand.primary}15`
+                    : `${theme.brand.primary}25`; // High density (5+ articles)
 
               return (
                 <Box
@@ -717,8 +759,8 @@ export default function NewsTimelinePage() {
                   onClick={() => selectDate(dayData.date)}
                   sx={{
                     aspectRatio: '1',
-                    bgcolor: isSelected ? `${theme.brand.primary}15` : isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-                    border: `1px solid ${isSelected ? `${theme.brand.primary}30` : theme.border.subtle}`,
+                    bgcolor: isSelected ? `${theme.brand.primary}20` : densityBg,
+                    border: `1px solid ${isSelected ? `${theme.brand.primary}40` : hasCritical ? 'rgba(244, 67, 54, 0.5)' : theme.border.subtle}`,
                     borderRadius: 1,
                     display: 'flex',
                     flexDirection: 'column',
@@ -733,22 +775,35 @@ export default function NewsTimelinePage() {
                       borderColor: theme.border.hover,
                       transform: 'scale(1.05)',
                     },
+                    // News indicator dot at bottom
                     '&::after': hasNewsData ? {
                       content: '""',
                       position: 'absolute',
                       bottom: 4,
-                      width: 4,
-                      height: 4,
-                      bgcolor: theme.brand.primary,
+                      width: density >= 3 ? 6 : 4,
+                      height: density >= 3 ? 6 : 4,
+                      bgcolor: hasCritical ? '#f44336' : theme.brand.primary,
                       borderRadius: '50%',
+                      boxShadow: hasCritical ? '0 0 4px rgba(244, 67, 54, 0.5)' : undefined,
                     } : undefined,
+                    // Critical news accent - red left border
+                    ...(hasCritical && !dayData.isOtherMonth ? {
+                      borderLeft: '3px solid #f44336',
+                    } : {}),
                   }}
                 >
                   <Typography sx={{ fontSize: 14, color: theme.text.secondary, fontWeight: 500 }}>
                     {dayData.day}
                   </Typography>
                   {newsCount > 0 && (
-                    <Typography sx={{ fontSize: 10, color: theme.brand.primary, mt: 0.25 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 10,
+                        color: hasCritical ? '#f44336' : theme.brand.primary,
+                        mt: 0.25,
+                        fontWeight: density >= 3 ? 600 : 400,
+                      }}
+                    >
                       {newsCount}
                     </Typography>
                   )}
@@ -895,18 +950,121 @@ export default function NewsTimelinePage() {
             p: '20px 24px',
             bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
             borderBottom: `1px solid ${theme.border.default}`,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
           }}
         >
-          <Box>
-            <Typography sx={{ fontSize: 24, fontWeight: 700, color: theme.text.primary, fontFamily: 'Times New Roman, serif' }}>
-              Market News
-            </Typography>
-            <Typography sx={{ fontSize: 14, color: theme.text.muted, mt: 0.5 }}>
-              {currentYear}/{currentMonth + 1}
-            </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box>
+              <Typography sx={{ fontSize: 24, fontWeight: 700, color: theme.text.primary, fontFamily: 'Times New Roman, serif' }}>
+                Market News
+              </Typography>
+              <Typography sx={{ fontSize: 14, color: theme.text.muted, mt: 0.5 }}>
+                {currentYear}/{currentMonth + 1}
+              </Typography>
+            </Box>
+            {/* Source Tabs */}
+            <Box
+              sx={{
+                display: 'flex',
+                bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+                border: `1px solid ${theme.border.subtle}`,
+                borderRadius: 2,
+                p: 0.5,
+              }}
+            >
+              {([
+                { value: 'jeff-cox' as NewsSource, label: 'CNBC' },
+                { value: 'bloomberg' as NewsSource, label: 'Bloomberg' },
+              ]).map((src) => (
+                <Box
+                  key={src.value}
+                  onClick={() => setNewsSource(src.value)}
+                  sx={{
+                    px: 2,
+                    py: 0.75,
+                    borderRadius: 1.5,
+                    fontSize: 13,
+                    fontWeight: newsSource === src.value ? 600 : 400,
+                    color: newsSource === src.value ? theme.brand.primary : theme.text.muted,
+                    bgcolor: newsSource === src.value
+                      ? `${theme.brand.primary}15`
+                      : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      bgcolor: newsSource === src.value
+                        ? `${theme.brand.primary}20`
+                        : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+                    },
+                  }}
+                >
+                  {src.label}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+
+          {/* Filter Bar */}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {/* Category Filters */}
+            {(['all', 'important', 'crypto', 'stocks', 'forex'] as NewsFilterType[]).map((filter) => (
+              <Chip
+                key={filter}
+                label={filter.charAt(0).toUpperCase() + filter.slice(1)}
+                size="small"
+                onClick={() => setActiveFilter(filter)}
+                sx={{
+                  bgcolor: activeFilter === filter
+                    ? `${theme.brand.primary}20`
+                    : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                  border: `1px solid ${activeFilter === filter ? theme.brand.primary : theme.border.subtle}`,
+                  color: activeFilter === filter ? theme.brand.primary : theme.text.secondary,
+                  fontWeight: activeFilter === filter ? 600 : 400,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    bgcolor: activeFilter === filter
+                      ? `${theme.brand.primary}25`
+                      : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                  },
+                }}
+              />
+            ))}
+
+            {/* Separator */}
+            <Box sx={{ width: 1, bgcolor: theme.border.subtle, mx: 0.5 }} />
+
+            {/* Importance Level Filters */}
+            {([
+              { value: 'critical' as NewsFilterType, label: 'Critical', color: '#f44336' },
+              { value: 'high' as NewsFilterType, label: 'High', color: '#ff9800' },
+              { value: 'medium' as NewsFilterType, label: 'Medium', color: '#2196f3' },
+              { value: 'low' as NewsFilterType, label: 'Low', color: '#9e9e9e' },
+            ]).map((filter) => (
+              <Chip
+                key={filter.value}
+                label={filter.label}
+                size="small"
+                onClick={() => setActiveFilter(filter.value)}
+                sx={{
+                  bgcolor: activeFilter === filter.value
+                    ? `${filter.color}20`
+                    : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                  border: `1px solid ${activeFilter === filter.value ? filter.color : theme.border.subtle}`,
+                  color: activeFilter === filter.value ? filter.color : theme.text.secondary,
+                  fontWeight: activeFilter === filter.value ? 600 : 400,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    bgcolor: activeFilter === filter.value
+                      ? `${filter.color}25`
+                      : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                    borderColor: `${filter.color}50`,
+                  },
+                }}
+              />
+            ))}
           </Box>
         </Box>
 
@@ -975,38 +1133,31 @@ export default function NewsTimelinePage() {
                       sx={{
                         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
                         border: `1px solid ${theme.border.subtle}`,
-                        borderRadius: 1.5,
+                        borderRadius: 2,
                         p: 2.5,
                         mb: 2,
                         cursor: 'pointer',
-                        transition: 'all 0.3s ease',
+                        transition: 'all 0.2s ease',
                         '&:hover': {
                           bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
                           borderColor: theme.border.hover,
-                          transform: 'translateX(4px)',
+                          transform: 'translateY(-2px)',
+                          boxShadow: isDark
+                            ? '0 8px 24px rgba(0,0,0,0.4)'
+                            : '0 8px 24px rgba(0,0,0,0.1)',
                         },
                       }}
                     >
+                      {/* Top Row: Labels + Source + Time */}
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box
-                            sx={{
-                              width: 24,
-                              height: 24,
-                              bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-                              borderRadius: 0.75,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 12,
-                            }}
-                          >
-                            {newsItem.source === 'Reuters' ? '📰' :
-                             newsItem.source === 'Bloomberg' ? '📊' :
-                             newsItem.source === 'WSJ' ? '💼' :
-                             newsItem.source === 'FT' ? '🏦' : '📋'}
-                          </Box>
-                          <Typography sx={{ fontSize: 13, color: theme.text.muted }}>
+                          <NewsLabelStrip
+                            importanceLevel={newsItem.importance_level}
+                            impact={newsItem.ai_impact}
+                            confidence={newsItem.impact_confidence}
+                            size="small"
+                          />
+                          <Typography sx={{ fontSize: 12, color: theme.text.muted, ml: 0.5 }}>
                             {newsItem.source}
                           </Typography>
                         </Box>
@@ -1014,48 +1165,70 @@ export default function NewsTimelinePage() {
                           {newsItem.time}
                         </Typography>
                       </Box>
-                      <Typography sx={{ fontSize: 18, fontWeight: 500, color: theme.text.primary, mb: 1, lineHeight: 1.4 }}>
+
+                      {/* Title - Larger and bolder */}
+                      <Typography
+                        sx={{
+                          fontSize: 20,
+                          fontWeight: 600,
+                          color: theme.text.primary,
+                          mb: 1,
+                          lineHeight: 1.4,
+                        }}
+                      >
                         {newsItem.title_zh || newsItem.headline}
                       </Typography>
+
+                      {/* Summary - Limited to 3 lines */}
                       <Typography
                         sx={{
                           fontSize: 14,
                           color: theme.text.secondary,
-                          lineHeight: 1.8,
+                          lineHeight: 1.7,
                           mb: 1.5,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                         }}
                       >
                         {newsItem.content_zh || newsItem.summary}
                       </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        {newsItem.important && (
-                          <Chip
-                            label="Important"
-                            size="small"
-                            sx={{
-                              bgcolor: 'rgba(255, 107, 107, 0.1)',
-                              borderColor: 'rgba(255, 107, 107, 0.3)',
-                              color: 'rgba(255, 107, 107, 0.9)',
-                              border: '1px solid',
-                            }}
-                          />
-                        )}
-                        {newsItem.tags.map((tag, index) => (
-                          <Chip
-                            key={index}
-                            label={tag}
-                            size="small"
-                            sx={{
-                              bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-                              border: `1px solid ${theme.border.subtle}`,
-                              color: theme.text.muted,
-                              fontSize: 11,
-                            }}
-                          />
-                        ))}
-                        <Box sx={{ ml: 'auto', display: 'flex', gap: 0.75 }}>
+
+                      {/* Bottom Row: Tags + Action Buttons */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                          {newsItem.important && (
+                            <Chip
+                              label="Important"
+                              size="small"
+                              sx={{
+                                bgcolor: 'rgba(255, 107, 107, 0.1)',
+                                borderColor: 'rgba(255, 107, 107, 0.3)',
+                                color: 'rgba(255, 107, 107, 0.9)',
+                                border: '1px solid',
+                                height: 22,
+                                fontSize: 10,
+                              }}
+                            />
+                          )}
+                          {newsItem.tags.slice(0, 3).map((tag, index) => (
+                            <Chip
+                              key={index}
+                              label={tag}
+                              size="small"
+                              sx={{
+                                bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                                border: `1px solid ${theme.border.subtle}`,
+                                color: theme.text.muted,
+                                fontSize: 10,
+                                height: 22,
+                              }}
+                            />
+                          ))}
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.75 }}>
                           <Button
                             size="small"
                             onClick={(e) => openArticleInEnglish(newsItem.id, e)}
@@ -1307,6 +1480,7 @@ export default function NewsTimelinePage() {
         onClose={handleCloseArticle}
         articleId={selectedArticleId}
         defaultLanguage={dialogDefaultLanguage}
+        source={newsSource}
       />
     </Box>
   );

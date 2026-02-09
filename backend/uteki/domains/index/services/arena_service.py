@@ -7,13 +7,14 @@ import re
 import time
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, func, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from uteki.common.config import settings
 from uteki.common.database import db_manager
 from uteki.domains.index.models.model_io import ModelIO
 from uteki.domains.index.models.decision_harness import DecisionHarness
+from uteki.domains.index.models.decision_log import DecisionLog
 from uteki.domains.index.models.prompt_version import PromptVersion
 
 logger = logging.getLogger(__name__)
@@ -320,6 +321,123 @@ class ArenaService:
             (input_tokens * rate["input"] + output_tokens * rate["output"]) / 1_000_000,
             4,
         )
+
+    async def get_arena_timeline(
+        self, session: AsyncSession, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """获取 Arena 时间线图表数据（按时间正序）"""
+        # 子查询：每个 harness 的 model_io 数量
+        model_count_subq = (
+            select(
+                ModelIO.harness_id,
+                func.count(ModelIO.id).label("model_count"),
+            )
+            .group_by(ModelIO.harness_id)
+            .subquery()
+        )
+
+        # 子查询：每个 harness 被 adopt 的模型的 action
+        # DecisionLog.adopted_model_io_id -> ModelIO.output_structured.action
+        adopted_subq = (
+            select(
+                DecisionLog.harness_id,
+                ModelIO.output_structured.label("adopted_structured"),
+            )
+            .join(ModelIO, DecisionLog.adopted_model_io_id == ModelIO.id)
+            .where(DecisionLog.adopted_model_io_id.is_not(None))
+            .subquery()
+        )
+
+        query = (
+            select(
+                DecisionHarness.id,
+                DecisionHarness.harness_type,
+                DecisionHarness.created_at,
+                DecisionHarness.account_state,
+                DecisionHarness.task,
+                model_count_subq.c.model_count,
+                PromptVersion.version.label("prompt_version"),
+                adopted_subq.c.adopted_structured,
+            )
+            .outerjoin(model_count_subq, DecisionHarness.id == model_count_subq.c.harness_id)
+            .outerjoin(PromptVersion, DecisionHarness.prompt_version_id == PromptVersion.id)
+            .outerjoin(adopted_subq, DecisionHarness.id == adopted_subq.c.harness_id)
+            .where(model_count_subq.c.model_count > 0)
+            .order_by(asc(DecisionHarness.created_at))
+            .limit(limit)
+        )
+
+        result = await session.execute(query)
+        rows = result.all()
+
+        timeline = []
+        for row in rows:
+            account = row.account_state or {}
+            account_total = account.get("total")
+
+            # 从 adopted 模型的 structured output 中提取 action
+            action = None
+            if row.adopted_structured and isinstance(row.adopted_structured, dict):
+                action = row.adopted_structured.get("action")
+
+            timeline.append({
+                "harness_id": row.id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "account_total": account_total,
+                "action": action,
+                "harness_type": row.harness_type,
+                "model_count": row.model_count or 0,
+                "prompt_version": row.prompt_version,
+                "budget": (row.task or {}).get("budget"),
+            })
+
+        return timeline
+
+    async def get_arena_history(
+        self, session: AsyncSession, limit: int = 20, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """获取 Arena 运行历史列表"""
+        # 子查询：每个 harness 的 model_io 数量
+        model_count_subq = (
+            select(
+                ModelIO.harness_id,
+                func.count(ModelIO.id).label("model_count"),
+            )
+            .group_by(ModelIO.harness_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                DecisionHarness.id,
+                DecisionHarness.harness_type,
+                DecisionHarness.created_at,
+                DecisionHarness.task,
+                model_count_subq.c.model_count,
+                PromptVersion.version.label("prompt_version"),
+            )
+            .outerjoin(model_count_subq, DecisionHarness.id == model_count_subq.c.harness_id)
+            .outerjoin(PromptVersion, DecisionHarness.prompt_version_id == PromptVersion.id)
+            .where(model_count_subq.c.model_count > 0)  # 仅返回有模型结果的 harness
+            .order_by(desc(DecisionHarness.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await session.execute(query)
+        rows = result.all()
+
+        return [
+            {
+                "harness_id": row.id,
+                "harness_type": row.harness_type,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "budget": (row.task or {}).get("budget"),
+                "model_count": row.model_count or 0,
+                "prompt_version": row.prompt_version,
+            }
+            for row in rows
+        ]
 
     async def get_arena_results(
         self, harness_id: str, session: AsyncSession

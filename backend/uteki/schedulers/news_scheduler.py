@@ -10,7 +10,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 
 from uteki.common.database import db_manager
-from uteki.domains.news.services import get_jeff_cox_service
+from uteki.domains.news.services import get_jeff_cox_service, get_bloomberg_service
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,15 @@ class NewsScheduler:
             trigger=CronTrigger(hour=2, minute=0),
             id='news_deep_scrape_daily',
             name='Jeff Cox Deep Scraper (daily)',
+            replace_existing=True
+        )
+
+        # Bloomberg 固收/企业债券新闻：每 2 小时抓取一次
+        self.scheduler.add_job(
+            self._bloomberg_scrape_job,
+            trigger=IntervalTrigger(hours=2),
+            id='bloomberg_scrape_interval',
+            name='Bloomberg Bond News Scraper (2h interval)',
             replace_existing=True
         )
 
@@ -149,6 +158,35 @@ class NewsScheduler:
 
         except Exception as e:
             logger.error(f"Daily deep scrape job failed: {e}", exc_info=True)
+
+    async def _bloomberg_scrape_job(self):
+        """Bloomberg 定时抓取任务"""
+        try:
+            logger.info("Starting scheduled Bloomberg news scrape...")
+
+            if not db_manager.postgres_available:
+                logger.warning("PostgreSQL not available, skipping Bloomberg scrape")
+                return
+
+            async for session in db_manager.get_session():
+                try:
+                    service = get_bloomberg_service()
+                    result = await service.collect_and_enrich(session, max_news=10)
+
+                    if result.get('success'):
+                        logger.info(
+                            f"Bloomberg scheduled scrape completed: "
+                            f"{result.get('new_articles_saved', 0)} new articles, "
+                            f"duration: {result.get('duration', 0):.2f}s"
+                        )
+                    else:
+                        logger.warning(f"Bloomberg scheduled scrape failed: {result.get('error')}")
+
+                except Exception as e:
+                    logger.error(f"Error in Bloomberg scheduled scrape: {e}", exc_info=True)
+
+        except Exception as e:
+            logger.error(f"Bloomberg scheduled scrape job failed: {e}", exc_info=True)
 
     async def trigger_scrape_now(self, max_news: int = 10) -> dict:
         """手动触发一次抓取"""

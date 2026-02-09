@@ -1,4 +1,4 @@
-import { get, post, del } from './client';
+import { get, post, put, del } from './client';
 
 // ── Types ──
 
@@ -25,6 +25,11 @@ export interface QuoteData {
   rsi?: number;
   timestamp?: string;
   stale: boolean;
+  // Today's OHLC
+  today_open?: number;
+  today_high?: number;
+  today_low?: number;
+  previous_close?: number;
 }
 
 export interface PricePoint {
@@ -92,7 +97,28 @@ export interface ArenaResult {
   harness_id: string;
   harness_type: string;
   prompt_version_id: string;
+  prompt_version?: string;
   models: ModelIOSummary[];
+}
+
+export interface ArenaHistoryItem {
+  harness_id: string;
+  harness_type: string;
+  created_at: string;
+  budget: number | null;
+  model_count: number;
+  prompt_version?: string;
+}
+
+export interface ArenaTimelinePoint {
+  harness_id: string;
+  created_at: string;
+  account_total: number | null;
+  action: string | null;
+  harness_type: string;
+  model_count: number;
+  prompt_version?: string;
+  budget: number | null;
 }
 
 export interface DecisionLogItem {
@@ -201,6 +227,23 @@ export const fetchHistory = (symbol: string, start?: string, end?: string) => {
 export const refreshData = () =>
   post<IndexResponse>('/api/index/data/refresh');
 
+export interface DataValidationResult {
+  symbol: string;
+  is_valid: boolean;
+  missing_dates: string[];
+  first_date?: string;
+  last_date?: string;
+  total_records: number;
+  error?: string;
+}
+
+export const validateData = (symbol?: string) => {
+  const qs = symbol ? `?symbol=${encodeURIComponent(symbol)}` : '';
+  return post<IndexResponse<DataValidationResult | Record<string, DataValidationResult>>>(
+    `/api/index/data/validate${qs}`
+  );
+};
+
 // ── Backtest ──
 
 export const runBacktest = (params: {
@@ -219,10 +262,16 @@ export const fetchCurrentPrompt = () =>
   get<IndexResponse<PromptVersion>>('/api/index/prompt/current');
 
 export const updatePrompt = (content: string, description: string) =>
-  post<IndexResponse<PromptVersion>>('/api/index/prompt', { content, description });
+  put<IndexResponse<PromptVersion>>('/api/index/prompt', { content, description });
 
 export const fetchPromptHistory = () =>
   get<IndexResponse<PromptVersion[]>>('/api/index/prompt/history');
+
+export const activatePromptVersion = (versionId: string) =>
+  put<IndexResponse<PromptVersion>>(`/api/index/prompt/${versionId}/activate`);
+
+export const deletePromptVersion = (versionId: string) =>
+  del<IndexResponse<void>>(`/api/index/prompt/${versionId}`);
 
 // ── Memory ──
 
@@ -242,6 +291,12 @@ export const writeMemory = (category: string, content: string, metadata?: Record
 export const runArena = (params: {
   harness_type?: string; budget?: number; constraints?: Record<string, any>;
 }) => post<IndexResponse<ArenaResult>>('/api/index/arena/run', params, { timeout: 180000 });
+
+export const fetchArenaTimeline = (limit = 50) =>
+  get<IndexResponse<ArenaTimelinePoint[]>>(`/api/index/arena/timeline?limit=${limit}`);
+
+export const fetchArenaHistory = (limit = 20, offset = 0) =>
+  get<IndexResponse<ArenaHistoryItem[]>>(`/api/index/arena/history?limit=${limit}&offset=${offset}`);
 
 export const fetchArenaResults = (harnessId: string) =>
   get<IndexResponse<ModelIOSummary[]>>(`/api/index/arena/${harnessId}`);

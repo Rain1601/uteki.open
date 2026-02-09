@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Box, Typography, Tabs, Tab } from '@mui/material';
 import {
-  Chat as ChatIcon,
   Casino as ArenaIcon,
   Timeline as TimelineIcon,
   Leaderboard as LeaderboardIcon,
@@ -9,7 +8,6 @@ import {
   Assessment as BacktestIcon,
 } from '@mui/icons-material';
 import { useTheme } from '../theme/ThemeProvider';
-import ChatPanel from '../components/index/ChatPanel';
 import ArenaView from '../components/index/ArenaView';
 import DecisionTimeline from '../components/index/DecisionTimeline';
 import LeaderboardTable from '../components/index/LeaderboardTable';
@@ -17,7 +15,6 @@ import SettingsPanel from '../components/index/SettingsPanel';
 import BacktestPanel from '../components/index/BacktestPanel';
 
 const tabs = [
-  { label: 'Chat', icon: <ChatIcon fontSize="small" /> },
   { label: 'Arena', icon: <ArenaIcon fontSize="small" /> },
   { label: 'History', icon: <TimelineIcon fontSize="small" /> },
   { label: 'Leaderboard', icon: <LeaderboardIcon fontSize="small" /> },
@@ -86,12 +83,11 @@ export default function IndexAgentPage() {
 
       {/* Tab Content */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 0 && <ChatPanel />}
-        {activeTab === 1 && <ArenaView />}
-        {activeTab === 2 && <DecisionTimeline />}
-        {activeTab === 3 && <LeaderboardTable />}
-        {activeTab === 4 && <BacktestPanel />}
-        {activeTab === 5 && <SettingsPanel />}
+        {activeTab === 0 && <ArenaView />}
+        {activeTab === 1 && <DecisionTimeline />}
+        {activeTab === 2 && <LeaderboardTable />}
+        {activeTab === 3 && <BacktestPanel />}
+        {activeTab === 4 && <SettingsPanel />}
       </Box>
     </Box>
   );

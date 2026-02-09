@@ -1,5 +1,5 @@
 /**
- * News API module - Jeff Cox news and AI analysis
+ * News API module - Multi-source news and AI analysis
  */
 
 import { get, post } from './client';
@@ -12,17 +12,27 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8888';
 
+export type NewsSource = 'jeff-cox' | 'bloomberg';
+
+/**
+ * Get the API path prefix for a news source
+ */
+function getSourcePath(source: NewsSource = 'jeff-cox'): string {
+  return `/api/news/${source}`;
+}
+
 /**
  * Get monthly news by year and month
  */
 export async function getMonthlyNews(
   year: number,
   month: number,
-  category: string = 'all'
+  category: string = 'all',
+  source: NewsSource = 'jeff-cox'
 ): Promise<MonthlyNewsResponse> {
   try {
     const data = await get<MonthlyNewsResponse>(
-      `/api/news/jeff-cox/monthly/${year}/${month}`,
+      `${getSourcePath(source)}/monthly/${year}/${month}`,
       { params: { category } }
     );
     return data;
@@ -38,10 +48,13 @@ export async function getMonthlyNews(
 /**
  * Get article detail by ID
  */
-export async function getArticleDetail(articleId: string): Promise<ArticleDetailResponse> {
+export async function getArticleDetail(
+  articleId: string,
+  source: NewsSource = 'jeff-cox'
+): Promise<ArticleDetailResponse> {
   try {
     const data = await get<ArticleDetailResponse>(
-      `/api/news/jeff-cox/article/${articleId}`
+      `${getSourcePath(source)}/article/${articleId}`
     );
     return data;
   } catch (error) {
@@ -62,10 +75,13 @@ export async function getArticleDetail(articleId: string): Promise<ArticleDetail
 /**
  * Get latest news
  */
-export async function getLatestNews(limit: number = 20): Promise<NewsItem[]> {
+export async function getLatestNews(
+  limit: number = 20,
+  source: NewsSource = 'jeff-cox'
+): Promise<NewsItem[]> {
   try {
     const data = await get<{ success: boolean; data: NewsItem[] }>(
-      `/api/news/jeff-cox/latest`,
+      `${getSourcePath(source)}/latest`,
       { params: { limit } }
     );
     return data.success ? data.data : [];
@@ -78,10 +94,12 @@ export async function getLatestNews(limit: number = 20): Promise<NewsItem[]> {
 /**
  * Trigger news scraping (admin function)
  */
-export async function triggerScrape(): Promise<{ success: boolean; message?: string }> {
+export async function triggerScrape(
+  source: NewsSource = 'jeff-cox'
+): Promise<{ success: boolean; message?: string }> {
   try {
     const data = await post<{ success: boolean; message?: string }>(
-      `/api/news/jeff-cox/scrape`
+      `${getSourcePath(source)}/scrape`
     );
     return data;
   } catch (error) {

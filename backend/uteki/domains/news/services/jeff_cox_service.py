@@ -163,6 +163,7 @@ class JeffCoxService:
         try:
             start_time = datetime.now()
 
+            # 从作者页面获取新文章 URL
             author_page_urls = await self.collect_from_author_page(session, max_news)
 
             new_articles_count = 0

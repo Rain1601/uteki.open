@@ -71,6 +71,10 @@ class NewsArticle(Base, TimestampMixin):
     # 重要性标记
     important: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # 自动标签字段（LLM生成）
+    importance_level: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # critical/high/medium/low
+    impact_confidence: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # high/medium/low
+
     def to_dict(self) -> dict:
         """转换为字典"""
         return {
@@ -100,6 +104,8 @@ class NewsArticle(Base, TimestampMixin):
             "ai_analysis": self.ai_analysis,
             "ai_impact": self.ai_impact,
             "ai_analysis_status": self.ai_analysis_status,
+            "importance_level": self.importance_level,
+            "impact_confidence": self.impact_confidence,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

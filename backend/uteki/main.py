@@ -219,6 +219,7 @@ from uteki.domains.agent.api import router as agent_router
 from uteki.domains.auth.api import router as auth_router
 from uteki.domains.news.api import router as news_router
 from uteki.domains.news.analysis_api import router as news_analysis_router
+from uteki.domains.news.bloomberg_api import router as bloomberg_news_router
 from uteki.domains.macro.api import router as macro_router
 from uteki.domains.snb.api import router as snb_router
 from uteki.domains.index.api import router as index_router
@@ -233,6 +234,7 @@ app.include_router(agent_router, prefix="/api/agent", tags=["agent"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(news_router, prefix="/api/news", tags=["news"])
 app.include_router(news_analysis_router, prefix="/api/news-analysis", tags=["news-analysis"])
+app.include_router(bloomberg_news_router, prefix="/api/news", tags=["bloomberg-news"])
 app.include_router(macro_router, prefix="/api/economic-calendar", tags=["economic-calendar"])
 app.include_router(snb_router, prefix="/api/snb", tags=["snb"])
 app.include_router(index_router, prefix="/api/index", tags=["index"])

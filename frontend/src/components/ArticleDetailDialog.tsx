@@ -23,7 +23,9 @@ import {
 } from '@mui/icons-material';
 import { useTheme } from '../theme/ThemeProvider';
 import LoadingDots from './LoadingDots';
-import { getArticleDetail } from '../api/news';
+import { getArticleDetail, NewsSource } from '../api/news';
+import { NewsLabelStrip } from './news/NewsLabelBadges';
+import { ImportanceLevel, ImpactDirection, ConfidenceLevel } from '../types/news';
 
 interface ArticleData {
   id: string;
@@ -44,6 +46,10 @@ interface ArticleData {
   tags?: string[];
   important?: boolean;
   translation_status?: string;
+  // Auto-labeling fields
+  importance_level?: ImportanceLevel;
+  ai_impact?: ImpactDirection;
+  impact_confidence?: ConfidenceLevel;
 }
 
 interface AnalysisData {
@@ -70,6 +76,7 @@ interface ArticleDetailDialogProps {
   onClose: () => void;
   articleId: string | null;
   defaultLanguage?: 'en' | 'zh' | null;
+  source?: NewsSource;
 }
 
 export default function ArticleDetailDialog({
@@ -77,6 +84,7 @@ export default function ArticleDetailDialog({
   onClose,
   articleId,
   defaultLanguage = null,
+  source = 'jeff-cox',
 }: ArticleDetailDialogProps) {
   const { theme } = useTheme();
   const isDark = theme.mode === 'dark';
@@ -99,7 +107,7 @@ export default function ArticleDetailDialog({
     setError(null);
 
     try {
-      const response = await getArticleDetail(articleId);
+      const response = await getArticleDetail(articleId, source);
       if (response.success) {
         setArticle(response.data as ArticleData);
 
@@ -375,15 +383,29 @@ export default function ArticleDetailDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="md"
+      maxWidth="lg"
       fullWidth
+      TransitionProps={{
+        timeout: 300,
+      }}
       PaperProps={{
         sx: {
           bgcolor: theme.background.secondary,
           color: theme.text.primary,
-          maxWidth: '900px',
-          width: '90%',
+          maxWidth: '1000px',
+          width: '95%',
           maxHeight: '90vh',
+          animation: open ? 'dialogFadeIn 0.3s ease-out' : undefined,
+          '@keyframes dialogFadeIn': {
+            from: {
+              opacity: 0,
+              transform: 'scale(0.95)',
+            },
+            to: {
+              opacity: 1,
+              transform: 'scale(1)',
+            },
+          },
         },
       }}
     >
@@ -459,7 +481,7 @@ export default function ArticleDetailDialog({
 
           <DialogContent
             sx={{
-              p: 3,
+              p: 0,
               overflowY: 'auto',
               '&::-webkit-scrollbar': { width: '8px' },
               '&::-webkit-scrollbar-track': { background: 'transparent' },
@@ -467,131 +489,227 @@ export default function ArticleDetailDialog({
               '&::-webkit-scrollbar-thumb:hover': { background: `${theme.brand.primary}50` },
             }}
           >
-            {article.translation_status === 'completed' && (article.title_zh || article.content_full_zh) && (
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showChinese}
-                    onChange={(e) => setShowChinese(e.target.checked)}
+            {/* Two-column layout with responsive fallback */}
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', md: 'row' },
+                minHeight: '100%',
+              }}
+            >
+              {/* Main Content Area (70%) */}
+              <Box
+                sx={{
+                  flex: { xs: 1, md: '0 0 70%' },
+                  p: 3,
+                  borderRight: { xs: 'none', md: `1px solid ${theme.border.default}` },
+                  order: { xs: 2, md: 1 },
+                }}
+              >
+                {/* Key Points Section */}
+                {((showChinese && article.keypoints_zh) || article.keypoints) && (
+                  <Box
                     sx={{
-                      '& .MuiSwitch-switchBase.Mui-checked': { color: theme.brand.primary },
-                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: theme.brand.primary },
+                      bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                      border: `1px solid ${theme.border.subtle}`,
+                      borderRadius: 2,
+                      p: 2.5,
+                      mb: 3,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.brand.primary, mb: 1.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Key Points
+                    </Typography>
+                    <Box
+                      sx={{ fontSize: 15, lineHeight: 1.8, color: theme.text.secondary }}
+                      dangerouslySetInnerHTML={{
+                        __html: (showChinese && article.keypoints_zh) || article.keypoints || '',
+                      }}
+                    />
+                  </Box>
+                )}
+
+                {/* Analysis Sections */}
+                {renderKeyElements()}
+                {renderMarketImpact()}
+
+                {/* Full Content */}
+                {((showChinese && article.content_full_zh) || article.content_full) ? (
+                  <Box
+                    sx={{
+                      fontSize: 15,
+                      lineHeight: 1.9,
+                      color: theme.text.secondary,
+                      '& p': { mb: 2.5 },
+                      '& h2, & h3': { color: theme.text.primary, mt: 4, mb: 2, fontWeight: 600 },
+                      '& a': { color: theme.brand.primary, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } },
+                      '& ul, & ol': { pl: 3, mb: 2 },
+                      '& li': { mb: 1.5 },
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: (showChinese && article.content_full_zh) || article.content_full || '',
                     }}
                   />
-                }
-                label={showChinese ? 'Chinese' : 'English'}
-                sx={{ mb: 2, color: theme.text.secondary }}
-              />
-            )}
+                ) : (
+                  <Typography sx={{ color: theme.text.muted, py: 4, textAlign: 'center' }}>
+                    No full content available
+                  </Typography>
+                )}
+              </Box>
 
-            {article.tags && article.tags.length > 0 && (
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2.5 }}>
-                {article.important && (
-                  <Chip
-                    label="Important"
-                    size="small"
-                    sx={{
-                      bgcolor: 'rgba(255, 107, 107, 0.1)',
-                      borderColor: 'rgba(255, 107, 107, 0.3)',
-                      color: 'rgba(255, 107, 107, 0.9)',
-                      border: '1px solid',
-                      fontSize: 12,
-                    }}
+              {/* Metadata Sidebar (30%) */}
+              <Box
+                sx={{
+                  flex: { xs: 1, md: '0 0 30%' },
+                  p: 2.5,
+                  bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                  order: { xs: 1, md: 2 },
+                  borderBottom: { xs: `1px solid ${theme.border.default}`, md: 'none' },
+                }}
+              >
+                {/* Language Toggle */}
+                {article.translation_status === 'completed' && (article.title_zh || article.content_full_zh) && (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={showChinese}
+                        onChange={(e) => setShowChinese(e.target.checked)}
+                        size="small"
+                        sx={{
+                          '& .MuiSwitch-switchBase.Mui-checked': { color: theme.brand.primary },
+                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: theme.brand.primary },
+                        }}
+                      />
+                    }
+                    label={showChinese ? 'Chinese' : 'English'}
+                    sx={{ mb: 2.5, color: theme.text.secondary, display: 'block' }}
                   />
                 )}
-                {article.tags.map((tag, index) => (
-                  <Chip
-                    key={index}
-                    label={tag}
-                    size="small"
-                    sx={{
-                      bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-                      border: `1px solid ${theme.border.subtle}`,
-                      color: theme.text.muted,
-                      fontSize: 12,
-                    }}
-                  />
-                ))}
+
+                {/* Label Badges - Prominent Display */}
+                {(article.importance_level || article.ai_impact) && (
+                  <Box sx={{ mb: 2.5 }}>
+                    <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.text.muted, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Analysis
+                    </Typography>
+                    <NewsLabelStrip
+                      importanceLevel={article.importance_level}
+                      impact={article.ai_impact}
+                      confidence={article.impact_confidence}
+                      size="medium"
+                      showConfidence
+                    />
+                  </Box>
+                )}
+
+                {/* Metadata */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {article.author && (
+                    <Box>
+                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.text.muted, mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Author
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <PersonIcon sx={{ fontSize: 16, color: theme.text.muted }} />
+                        <Typography sx={{ fontSize: 14, color: theme.text.secondary }}>{article.author}</Typography>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {(article.published_at || article.publish_time) && (
+                    <Box>
+                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.text.muted, mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Published
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <TimeIcon sx={{ fontSize: 16, color: theme.text.muted }} />
+                        <Typography sx={{ fontSize: 14, color: theme.text.secondary }}>
+                          {formatDate(article.published_at || article.publish_time)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+
+                  <Box>
+                    <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.text.muted, mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Source
+                    </Typography>
+                    <Typography sx={{ fontSize: 14, color: theme.text.secondary }}>{article.source || 'CNBC'}</Typography>
+                  </Box>
+
+                  {/* Tags */}
+                  {article.tags && article.tags.length > 0 && (
+                    <Box>
+                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.text.muted, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Tags
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                        {article.important && (
+                          <Chip
+                            label="Important"
+                            size="small"
+                            sx={{
+                              bgcolor: 'rgba(255, 107, 107, 0.1)',
+                              borderColor: 'rgba(255, 107, 107, 0.3)',
+                              color: 'rgba(255, 107, 107, 0.9)',
+                              border: '1px solid',
+                              fontSize: 11,
+                              height: 24,
+                            }}
+                          />
+                        )}
+                        {article.tags.map((tag, index) => (
+                          <Chip
+                            key={index}
+                            label={tag}
+                            size="small"
+                            sx={{
+                              bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                              border: `1px solid ${theme.border.subtle}`,
+                              color: theme.text.muted,
+                              fontSize: 11,
+                              height: 24,
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* View Original Link */}
+                  {article.url && (
+                    <Box
+                      component="a"
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        mt: 2,
+                        px: 2,
+                        py: 1,
+                        bgcolor: `${theme.brand.primary}15`,
+                        border: `1px solid ${theme.brand.primary}30`,
+                        borderRadius: 1.5,
+                        color: theme.brand.primary,
+                        textDecoration: 'none',
+                        fontSize: 13,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          bgcolor: `${theme.brand.primary}20`,
+                          borderColor: `${theme.brand.primary}40`,
+                        },
+                      }}
+                    >
+                      <OpenIcon sx={{ fontSize: 16 }} />
+                      View Original
+                    </Box>
+                  )}
+                </Box>
               </Box>
-            )}
-
-            {renderKeyElements()}
-            {renderMarketImpact()}
-
-            {((showChinese && article.keypoints_zh) || article.keypoints) && (
-              <Box
-                sx={{
-                  bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  border: `1px solid ${theme.border.subtle}`,
-                  borderRadius: 1,
-                  p: 2,
-                  mb: 2.5,
-                }}
-              >
-                <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.brand.primary, mb: 1.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Key Points
-                </Typography>
-                <Box
-                  sx={{ fontSize: 15, lineHeight: 1.8, color: theme.text.secondary }}
-                  dangerouslySetInnerHTML={{
-                    __html: (showChinese && article.keypoints_zh) || article.keypoints || '',
-                  }}
-                />
-              </Box>
-            )}
-
-            {((showChinese && article.content_full_zh) || article.content_full) ? (
-              <Box
-                sx={{
-                  fontSize: 15,
-                  lineHeight: 1.8,
-                  color: theme.text.secondary,
-                  '& p': { mb: 2 },
-                  '& h2, & h3': { color: theme.text.primary, mt: 3, mb: 1.5 },
-                  '& a': { color: theme.brand.primary, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } },
-                  '& ul, & ol': { pl: 3, mb: 2 },
-                  '& li': { mb: 1 },
-                }}
-                dangerouslySetInnerHTML={{
-                  __html: (showChinese && article.content_full_zh) || article.content_full || '',
-                }}
-              />
-            ) : (
-              <Typography sx={{ color: theme.text.muted }}>
-                No full content available
-              </Typography>
-            )}
-
-            {article.url && (
-              <Box
-                component="a"
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.75,
-                  mt: 3,
-                  px: 2,
-                  py: 1.25,
-                  bgcolor: `${theme.brand.primary}15`,
-                  border: `1px solid ${theme.brand.primary}30`,
-                  borderRadius: 1,
-                  color: theme.brand.primary,
-                  textDecoration: 'none',
-                  fontSize: 13,
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    bgcolor: `${theme.brand.primary}20`,
-                    borderColor: `${theme.brand.primary}40`,
-                  },
-                }}
-              >
-                <OpenIcon sx={{ fontSize: 16 }} />
-                View Original
-              </Box>
-            )}
+            </Box>
           </DialogContent>
         </>
       ) : null}

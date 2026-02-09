@@ -49,6 +49,8 @@ aiofiles = "^24.1.0"
 ddgs = "^9.10.0"  # DuckDuckGo search (formerly duckduckgo-search)
 beautifulsoup4 = "^4.12.0"
 trafilatura = "^1.12.0"
+# News scraping (Apify)
+apify-client = "^1.8.0"
 # Task scheduling
 apscheduler = "^3.10.4"
 # Monitoring

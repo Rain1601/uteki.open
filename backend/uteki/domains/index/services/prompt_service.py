@@ -83,6 +83,39 @@ class PromptService:
         logger.info(f"Created prompt version {new_version}: {description}")
         return version.to_dict()
 
+    async def activate_version(self, version_id: str, session: AsyncSession) -> Dict[str, Any]:
+        """将指定版本设为当前版本"""
+        # 查找目标版本
+        query = select(PromptVersion).where(PromptVersion.id == version_id)
+        result = await session.execute(query)
+        target = result.scalar_one_or_none()
+        if not target:
+            raise ValueError("Prompt version not found")
+
+        # 将所有版本标记为非当前
+        await session.execute(
+            update(PromptVersion).where(PromptVersion.is_current == True).values(is_current=False)
+        )
+        # 设置目标为当前
+        target.is_current = True
+        await session.commit()
+        await session.refresh(target)
+        logger.info(f"Activated prompt version {target.version} ({version_id})")
+        return target.to_dict()
+
+    async def delete_version(self, version_id: str, session: AsyncSession) -> None:
+        """删除指定版本（当前版本禁止删除）"""
+        query = select(PromptVersion).where(PromptVersion.id == version_id)
+        result = await session.execute(query)
+        target = result.scalar_one_or_none()
+        if not target:
+            raise ValueError("Prompt version not found")
+        if target.is_current:
+            raise ValueError("Cannot delete the current active version")
+        await session.delete(target)
+        await session.commit()
+        logger.info(f"Deleted prompt version {target.version} ({version_id})")
+
     async def get_history(self, session: AsyncSession) -> List[Dict[str, Any]]:
         """获取所有版本历史"""
         query = select(PromptVersion).order_by(PromptVersion.created_at.desc())

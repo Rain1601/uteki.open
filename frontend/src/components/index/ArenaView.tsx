@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  Grid,
   Chip,
   Collapse,
   TextField,
@@ -22,14 +21,17 @@ import { useTheme } from '../../theme/ThemeProvider';
 import LoadingDots from '../LoadingDots';
 import { useToast } from '../Toast';
 import {
-  ArenaResult,
+  ArenaTimelinePoint,
   ModelIOSummary,
   ModelIODetail,
   runArena,
+  fetchArenaTimeline,
+  fetchArenaResults,
   fetchModelIODetail,
   adoptModel,
 } from '../../api/index';
-import { ModelLogo, getProviderDisplayName } from './ModelLogos';
+import { ModelLogo } from './ModelLogos';
+import ArenaTimelineChart from './ArenaTimelineChart';
 
 // 当前已配置的模型列表（用于生成占位卡片）
 const KNOWN_MODELS = [
@@ -45,14 +47,46 @@ export default function ArenaView() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
 
-  const [result, setResult] = useState<ArenaResult | null>(null);
+  // Timeline data
+  const [timeline, setTimeline] = useState<ArenaTimelinePoint[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  // Selected point
+  const [selectedHarnessId, setSelectedHarnessId] = useState<string | null>(null);
+  const [selectedModels, setSelectedModels] = useState<ModelIOSummary[]>([]);
+  const [selectedHarnessType, setSelectedHarnessType] = useState('');
+  const [selectedPromptVersion, setSelectedPromptVersion] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Run controls
   const [running, setRunning] = useState(false);
   const [harnessType, setHarnessType] = useState('monthly_dca');
   const [budget, setBudget] = useState(1000);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 计时器
+  const cardBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+
+  // Load timeline data
+  const loadTimeline = useCallback(async () => {
+    setTimelineLoading(true);
+    try {
+      const res = await fetchArenaTimeline();
+      if (res.success && res.data) {
+        setTimeline(res.data);
+        // Default select latest point
+        if (res.data.length > 0 && !selectedHarnessId) {
+          const latest = res.data[res.data.length - 1];
+          handleSelectPoint(latest.harness_id, res.data);
+        }
+      }
+    } catch { /* ignore */ }
+    finally { setTimelineLoading(false); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadTimeline(); }, [loadTimeline]);
+
+  // Timer
   useEffect(() => {
     if (running) {
       setElapsedSeconds(0);
@@ -63,13 +97,39 @@ export default function ArenaView() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [running]);
 
+  // Select a point on the chart
+  const handleSelectPoint = useCallback(async (harnessId: string, timelineData?: ArenaTimelinePoint[]) => {
+    const tl = timelineData || timeline;
+    const point = tl.find((p) => p.harness_id === harnessId);
+
+    setSelectedHarnessId(harnessId);
+    setSelectedHarnessType(point?.harness_type || '');
+    setSelectedPromptVersion(point?.prompt_version || '');
+    setSelectedModels([]);
+    setDetailLoading(true);
+
+    try {
+      const res = await fetchArenaResults(harnessId);
+      if (res.success && res.data) setSelectedModels(res.data);
+      else showToast('Failed to load arena results', 'error');
+    } catch { showToast('Failed to load arena results', 'error'); }
+    finally { setDetailLoading(false); }
+  }, [timeline, showToast]);
+
+  // Run Arena
   const handleRun = useCallback(async () => {
     setRunning(true);
-    setResult(null);
     try {
       const res = await runArena({ harness_type: harnessType, budget });
       if (res.success && res.data) {
-        setResult(res.data);
+        // After run, reload timeline and select the new run
+        setSelectedHarnessId(res.data.harness_id);
+        setSelectedHarnessType(res.data.harness_type);
+        setSelectedPromptVersion(res.data.prompt_version || '');
+        setSelectedModels(res.data.models);
+        // Reload timeline to include new data point
+        const tlRes = await fetchArenaTimeline();
+        if (tlRes.success && tlRes.data) setTimeline(tlRes.data);
       } else {
         showToast(res.error || 'Arena run failed', 'error');
       }
@@ -80,21 +140,12 @@ export default function ArenaView() {
     }
   }, [harnessType, budget, showToast]);
 
-  const cardBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
-  const cardBorder = `1px solid ${theme.border.subtle}`;
-
-  // 已完成的结果按 provider 索引
-  const completedByProvider = new Map<string, ModelIOSummary>();
-  if (result) {
-    for (const m of result.models) {
-      completedByProvider.set(m.model_provider, m);
-    }
-  }
+  const hasData = timeline.length > 0;
 
   return (
-    <Box sx={{ height: '100%', overflow: 'auto', px: 3, py: 2 }}>
-      {/* Controls */}
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* ── Top Controls ── */}
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', px: 3, py: 1.5, flexWrap: 'wrap', flexShrink: 0, borderBottom: `1px solid ${theme.border.subtle}` }}>
         <TextField
           select
           size="small"
@@ -146,65 +197,139 @@ export default function ArenaView() {
         )}
       </Box>
 
-      {/* Arena 说明 */}
-      {!result && !running && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 1 }}>
-          <Typography sx={{ fontSize: 16, fontWeight: 600, color: theme.text.muted }}>
-            Multi-Model Arena
-          </Typography>
-          <Typography sx={{ fontSize: 13, color: theme.text.muted, textAlign: 'center', maxWidth: 480 }}>
-            Arena 将同一份市场数据快照（Decision Harness）同时发送给多个 LLM，
-            让它们独立给出投资建议，方便你对比不同模型的分析能力和决策质量。
-          </Typography>
+      {/* ── Main Content: Left Chart + Right Detail ── */}
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          overflow: 'hidden',
+          minHeight: 0,
+        }}
+      >
+        {/* ── Left Panel: Timeline Chart (70%) ── */}
+        <Box
+          sx={{
+            width: { xs: '100%', md: '70%' },
+            height: { xs: 280, md: '100%' },
+            flexShrink: 0,
+            borderRight: { xs: 'none', md: `1px solid ${theme.border.subtle}` },
+            borderBottom: { xs: `1px solid ${theme.border.subtle}`, md: 'none' },
+          }}
+        >
+          {timelineLoading ? (
+            <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <LoadingDots text="Loading timeline" fontSize={13} />
+            </Box>
+          ) : (
+            <ArenaTimelineChart
+              data={timeline}
+              selectedHarnessId={selectedHarnessId}
+              onSelectPoint={(id) => handleSelectPoint(id)}
+            />
+          )}
         </Box>
-      )}
 
-      {/* Model Cards — 运行中显示骨架，完成后显示结果 */}
-      {(running || result) && (
-        <>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.text.secondary }}>
-              Arena Results
-            </Typography>
-            {result && (
-              <Chip
-                label={result.harness_type}
-                size="small"
-                sx={{ fontSize: 11, bgcolor: cardBg, color: theme.text.muted }}
-              />
-            )}
-          </Box>
-
-          <Grid container spacing={2}>
-            {running && !result
-              ? KNOWN_MODELS.map((m) => (
-                  <Grid item xs={12} md={6} lg={4} key={m.provider}>
+        {/* ── Right Panel: Model Cards (30%) ── */}
+        <Box
+          sx={{
+            width: { xs: '100%', md: '30%' },
+            overflow: 'auto',
+            px: 1.5,
+            py: 1.5,
+            minWidth: 0,
+          }}
+        >
+          {/* Running skeleton */}
+          {running && (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.text.secondary }}>
+                  Arena Results
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {KNOWN_MODELS.map((m) => (
+                  <Box key={m.provider}>
                     <SkeletonModelCard
                       provider={m.provider}
                       modelName={m.name}
                       theme={theme}
                       isDark={isDark}
-                      cardBg={cardBg}
-                      cardBorder={cardBorder}
                       elapsedSeconds={elapsedSeconds}
                     />
-                  </Grid>
-                ))
-              : result?.models.map((model) => (
-                  <Grid item xs={12} md={6} lg={4} key={model.id}>
-                    <ModelCard
-                      model={model}
-                      harnessId={result!.harness_id}
+                  </Box>
+                ))}
+              </Box>
+            </>
+          )}
+
+          {/* No data empty state */}
+          {!running && !hasData && !selectedHarnessId && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1 }}>
+              <Typography sx={{ fontSize: 16, fontWeight: 600, color: theme.text.muted }}>
+                Multi-Model Arena
+              </Typography>
+              <Typography sx={{ fontSize: 13, color: theme.text.muted, textAlign: 'center', maxWidth: 480 }}>
+                Arena 将同一份市场数据快照（Decision Harness）同时发送给多个 LLM，
+                让它们独立给出投资建议，方便你对比不同模型的分析能力和决策质量。
+              </Typography>
+            </Box>
+          )}
+
+          {/* Selected model results */}
+          {!running && selectedHarnessId && (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 1 }}>
+                <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.secondary }}>
+                  Results
+                </Typography>
+                {selectedHarnessType && (
+                  <Chip
+                    label={selectedHarnessType.replace('_', ' ')}
+                    size="small"
+                    sx={{ fontSize: 9, height: 18, bgcolor: cardBg, color: theme.text.muted }}
+                  />
+                )}
+                {selectedPromptVersion && (
+                  <Chip
+                    label={selectedPromptVersion}
+                    size="small"
+                    sx={{ fontSize: 9, height: 18, bgcolor: 'rgba(76,175,80,0.1)', color: '#4caf50' }}
+                  />
+                )}
+              </Box>
+
+              {detailLoading && selectedModels.length === 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {KNOWN_MODELS.map((m) => (
+                    <SkeletonModelCard
+                      key={m.provider}
+                      provider={m.provider}
+                      modelName={m.name}
                       theme={theme}
                       isDark={isDark}
-                      cardBg={cardBg}
-                      cardBorder={cardBorder}
+                      elapsedSeconds={0}
                     />
-                  </Grid>
-                ))}
-          </Grid>
-        </>
-      )}
+                  ))}
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {selectedModels.map((model) => (
+                    <ModelCard
+                      key={model.id}
+                      model={model}
+                      harnessId={selectedHarnessId}
+                      theme={theme}
+                      isDark={isDark}
+                    />
+                  ))}
+                </Box>
+              )}
+            </>
+          )}
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -215,70 +340,32 @@ function SkeletonModelCard({
   modelName,
   theme,
   isDark,
-  cardBg,
-  cardBorder,
   elapsedSeconds,
 }: {
   provider: string;
   modelName: string;
   theme: any;
   isDark: boolean;
-  cardBg: string;
-  cardBorder: string;
   elapsedSeconds: number;
 }) {
   return (
-    <Box
-      sx={{
-        bgcolor: cardBg,
-        border: cardBorder,
-        borderRadius: 2,
-        overflow: 'hidden',
-        position: 'relative',
-      }}
-    >
-      {/* Header — 真实名称 + Logo */}
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-          <ModelLogo provider={provider} size={24} isDark={isDark} />
-          <Box>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.text.primary, lineHeight: 1.3 }}>
-              {modelName}
-            </Typography>
-            <Typography sx={{ fontSize: 12, color: theme.text.muted, lineHeight: 1.2 }}>
-              {getProviderDisplayName(provider)}
-            </Typography>
-          </Box>
+    <Box sx={{ borderBottom: `1px solid ${theme.border.subtle}`, pb: 1 }}>
+      <Box sx={{ py: 0.8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ModelLogo provider={provider} size={18} isDark={isDark} />
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.primary }}>
+            {modelName}
+          </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <PendingIcon sx={{ fontSize: 14, color: theme.text.muted, animation: 'spin 2s linear infinite', '@keyframes spin': { '100%': { transform: 'rotate(360deg)' } } }} />
-          <Typography sx={{ fontSize: 11, color: theme.text.muted }}>
+          <PendingIcon sx={{ fontSize: 12, color: theme.text.muted, animation: 'spin 2s linear infinite', '@keyframes spin': { '100%': { transform: 'rotate(360deg)' } } }} />
+          <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
             {elapsedSeconds}s
           </Typography>
         </Box>
       </Box>
-
-      {/* Skeleton body */}
-      <Box sx={{ px: 2, pb: 2 }}>
-        <Skeleton variant="rounded" width={60} height={22} sx={{ mb: 1, bgcolor: 'rgba(128,128,128,0.1)' }} />
-        <Skeleton variant="text" width="80%" sx={{ bgcolor: 'rgba(128,128,128,0.08)' }} />
-        <Skeleton variant="text" width="65%" sx={{ bgcolor: 'rgba(128,128,128,0.08)' }} />
-        <Skeleton variant="text" width="45%" sx={{ bgcolor: 'rgba(128,128,128,0.08)' }} />
-      </Box>
-
-      {/* Pulsing bottom bar */}
-      <Box
-        sx={{
-          height: 3,
-          bgcolor: theme.brand.primary,
-          opacity: 0.5,
-          animation: 'pulse 1.5s ease-in-out infinite',
-          '@keyframes pulse': {
-            '0%, 100%': { opacity: 0.2 },
-            '50%': { opacity: 0.6 },
-          },
-        }}
-      />
+      <Skeleton variant="rounded" width={50} height={16} sx={{ mb: 0.5, bgcolor: 'rgba(128,128,128,0.1)' }} />
+      <Skeleton variant="text" width="70%" sx={{ bgcolor: 'rgba(128,128,128,0.08)', height: 14 }} />
     </Box>
   );
 }
@@ -289,15 +376,11 @@ function ModelCard({
   harnessId,
   theme,
   isDark,
-  cardBg,
-  cardBorder,
 }: {
   model: ModelIOSummary;
   harnessId: string;
   theme: any;
   isDark: boolean;
-  cardBg: string;
-  cardBorder: string;
 }) {
   const { showToast } = useToast();
   const [expanded, setExpanded] = useState(false);
@@ -314,11 +397,8 @@ function ModelCard({
       try {
         const res = await fetchModelIODetail(harnessId, model.id);
         if (res.success && res.data) setDetail(res.data);
-      } catch {
-        /* ignore */
-      } finally {
-        setDetailLoading(false);
-      }
+      } catch { /* ignore */ }
+      finally { setDetailLoading(false); }
     }
     setExpanded(!expanded);
   };
@@ -339,7 +419,6 @@ function ModelCard({
     }
   };
 
-  // 状态颜色
   const statusColor = isError ? '#f44336' : model.parse_status === 'structured' ? '#4caf50' : '#ff9800';
   const statusBg = isError ? 'rgba(244,67,54,0.12)' : model.parse_status === 'structured' ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)';
   const statusLabel = isError ? (model.status === 'timeout' ? 'timeout' : 'error') : model.parse_status || 'ok';
@@ -347,131 +426,123 @@ function ModelCard({
   return (
     <Box
       sx={{
-        bgcolor: cardBg,
-        border: isError ? '1px solid rgba(244,67,54,0.3)' : cardBorder,
-        borderRadius: 2,
-        overflow: 'hidden',
+        borderBottom: `1px solid ${isError ? 'rgba(244,67,54,0.3)' : theme.border.subtle}`,
         opacity: isError ? 0.75 : 1,
+        pb: 0.5,
       }}
     >
       {/* Header */}
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-          <ModelLogo provider={model.model_provider} size={24} isDark={isDark} />
-          <Box>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: theme.text.primary, lineHeight: 1.3 }}>
-              {model.model_name}
-            </Typography>
-            <Typography sx={{ fontSize: 12, color: theme.text.muted, lineHeight: 1.2 }}>
-              {getProviderDisplayName(model.model_provider)}
-            </Typography>
-          </Box>
-        </Box>
-        <Chip
-          icon={isError ? <ErrorIcon sx={{ fontSize: '14px !important' }} /> : undefined}
-          label={statusLabel}
-          size="small"
-          sx={{ fontSize: 10, height: 20, bgcolor: statusBg, color: statusColor }}
-        />
-      </Box>
-
-      {/* Error message */}
-      {isError && model.error_message && (
-        <Box sx={{ px: 2, pb: 1.5 }}>
-          <Typography sx={{ fontSize: 12, color: '#f44336', lineHeight: 1.5 }}>
-            {model.error_message.length > 120 ? model.error_message.slice(0, 120) + '...' : model.error_message}
+      <Box sx={{ py: 0.8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ModelLogo provider={model.model_provider} size={18} isDark={isDark} />
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.primary }}>
+            {model.model_name}
           </Typography>
         </Box>
-      )}
-
-      {/* Summary — 仅成功时显示 */}
-      {!isError && (
-        <Box sx={{ px: 2, pb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
           {structured.action && (
             <Chip
               label={structured.action}
               size="small"
               sx={{
-                mb: 1,
                 fontWeight: 600,
-                fontSize: 11,
+                fontSize: 10,
+                height: 18,
                 bgcolor: structured.action === 'BUY' ? 'rgba(76,175,80,0.15)' : structured.action === 'SELL' ? 'rgba(244,67,54,0.15)' : 'rgba(255,152,0,0.15)',
                 color: structured.action === 'BUY' ? '#4caf50' : structured.action === 'SELL' ? '#f44336' : '#ff9800',
               }}
             />
           )}
+          <Chip
+            icon={isError ? <ErrorIcon sx={{ fontSize: '12px !important' }} /> : undefined}
+            label={statusLabel}
+            size="small"
+            sx={{ fontSize: 9, height: 18, bgcolor: statusBg, color: statusColor }}
+          />
+        </Box>
+      </Box>
 
+      {/* Error message */}
+      {isError && model.error_message && (
+        <Box sx={{ pb: 0.5 }}>
+          <Typography sx={{ fontSize: 11, color: '#f44336', lineHeight: 1.4 }}>
+            {model.error_message.length > 80 ? model.error_message.slice(0, 80) + '...' : model.error_message}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Summary — allocations + metrics in compact row */}
+      {!isError && (
+        <Box sx={{ pb: 0.5 }}>
           {structured.allocations?.map((alloc: any, i: number) => (
-            <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.3 }}>
-              <Typography sx={{ fontSize: 12, color: theme.text.primary }}>{alloc.etf}</Typography>
-              <Typography sx={{ fontSize: 12, color: theme.text.secondary }}>
+            <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.15 }}>
+              <Typography sx={{ fontSize: 11, color: theme.text.primary }}>{alloc.etf}</Typography>
+              <Typography sx={{ fontSize: 11, color: theme.text.secondary }}>
                 ${alloc.amount?.toLocaleString()} ({alloc.percentage}%)
               </Typography>
             </Box>
           ))}
-
-          {structured.confidence != null && (
-            <Typography sx={{ fontSize: 11, color: theme.text.muted, mt: 0.5 }}>
-              Confidence: {(structured.confidence * 100).toFixed(0)}%
-            </Typography>
-          )}
         </Box>
       )}
 
-      {/* Metrics — 始终显示 */}
-      <Box sx={{ px: 2, pb: 1.5, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+      {/* Metrics */}
+      <Box sx={{ pb: 0.5, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
         {model.latency_ms != null && model.latency_ms > 0 && (
-          <Typography sx={{ fontSize: 11, color: theme.text.muted }}>
+          <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
             {(model.latency_ms / 1000).toFixed(1)}s
           </Typography>
         )}
         {model.cost_usd != null && model.cost_usd > 0 && (
-          <Typography sx={{ fontSize: 11, color: theme.text.muted }}>
+          <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
             ${model.cost_usd.toFixed(4)}
           </Typography>
         )}
         {model.output_token_count != null && model.output_token_count > 0 && (
-          <Typography sx={{ fontSize: 11, color: theme.text.muted }}>
-            {model.output_token_count} tokens
+          <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
+            {model.output_token_count} tok
+          </Typography>
+        )}
+        {structured.confidence != null && (
+          <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
+            {(structured.confidence * 100).toFixed(0)}%
           </Typography>
         )}
       </Box>
 
       {/* Actions */}
-      <Box sx={{ display: 'flex', borderTop: `1px solid ${theme.border.subtle}` }}>
+      <Box sx={{ display: 'flex', gap: 0.5, py: 0.3 }}>
         <Button
-          fullWidth
           size="small"
           onClick={handleExpand}
-          endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          sx={{ color: theme.text.muted, textTransform: 'none', fontSize: 12, borderRadius: 0 }}
+          endIcon={expanded ? <ExpandLessIcon sx={{ fontSize: 14 }} /> : <ExpandMoreIcon sx={{ fontSize: 14 }} />}
+          sx={{ color: theme.text.muted, textTransform: 'none', fontSize: 11, borderRadius: 1, py: 0.2, minHeight: 24 }}
         >
           {expanded ? 'Collapse' : 'Details'}
         </Button>
         {!isError && (
           <Button
-            fullWidth
             size="small"
-            startIcon={<AdoptIcon />}
+            startIcon={<AdoptIcon sx={{ fontSize: 14 }} />}
             onClick={handleAdopt}
             disabled={adopting}
             sx={{
               color: theme.brand.primary,
               textTransform: 'none',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 600,
-              borderRadius: 0,
-              borderLeft: `1px solid ${theme.border.subtle}`,
+              borderRadius: 1,
+              py: 0.2,
+              minHeight: 24,
             }}
           >
-            {adopting ? 'Adopting...' : 'Adopt'}
+            {adopting ? '...' : 'Adopt'}
           </Button>
         )}
       </Box>
 
       {/* Detail */}
       <Collapse in={expanded}>
-        <Box sx={{ p: 2, borderTop: `1px solid ${theme.border.subtle}`, maxHeight: 300, overflow: 'auto' }}>
+        <Box sx={{ py: 1, maxHeight: 200, overflow: 'auto' }}>
           {detailLoading ? (
             <LoadingDots text="Loading" fontSize={12} />
           ) : detail ? (

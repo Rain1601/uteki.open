@@ -60,6 +60,9 @@ export const get = <T = any>(url: string, config?: AxiosRequestConfig) =>
 export const post = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
   apiClient.post<T>(url, data, config).then((res) => res.data);
 
+export const put = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+  apiClient.put<T>(url, data, config).then((res) => res.data);
+
 export const patch = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
   apiClient.patch<T>(url, data, config).then((res) => res.data);
 

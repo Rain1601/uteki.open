@@ -84,6 +84,11 @@ class DataService:
                 "rsi": None,  # FMP quote 不含 RSI，需从历史数据计算
                 "timestamp": q.get("timestamp"),
                 "stale": False,
+                # Today's OHLC (if available)
+                "today_open": q.get("open"),
+                "today_high": q.get("dayHigh"),
+                "today_low": q.get("dayLow"),
+                "previous_close": q.get("previousClose"),
             }
         except Exception as e:
             logger.error(f"FMP quote error for {symbol}: {e}")
@@ -123,6 +128,11 @@ class DataService:
                 "rsi": None,
                 "timestamp": data.get("07. latest trading day"),
                 "stale": False,
+                # AV GLOBAL_QUOTE includes open/high/low
+                "today_open": float(data.get("02. open", 0)) or None,
+                "today_high": float(data.get("03. high", 0)) or None,
+                "today_low": float(data.get("04. low", 0)) or None,
+                "previous_close": prev_close or None,
             }
         except Exception as e:
             logger.error(f"AV quote error for {symbol}: {e}")
@@ -153,6 +163,11 @@ class DataService:
                 "rsi": None,
                 "timestamp": row.date.isoformat(),
                 "stale": True,
+                # Cached data has OHLC from DB
+                "today_open": row.open,
+                "today_high": row.high,
+                "today_low": row.low,
+                "previous_close": None,
             }
         return {"symbol": symbol, "price": None, "stale": True, "error": "No data available"}
 
@@ -259,6 +274,86 @@ class DataService:
 
         return await self.fetch_and_store_history(symbol, session, from_date=from_date)
 
+    async def incremental_update_with_retry(
+        self, symbol: str, session: AsyncSession, max_retries: int = 3
+    ) -> Dict[str, Any]:
+        """带重试的增量更新"""
+        import asyncio
+
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                count = await self.incremental_update(symbol, session)
+                return {"symbol": symbol, "status": "success", "records": count}
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Retry {attempt + 1}/{max_retries} for {symbol}: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+
+        logger.error(f"Failed to update {symbol} after {max_retries} retries: {last_error}")
+        return {"symbol": symbol, "status": "failed", "error": last_error}
+
+    async def smart_backfill(
+        self, symbol: str, session: AsyncSession, lookback_days: int = 30
+    ) -> Dict[str, Any]:
+        """
+        智能回填：检测最近 N 天内的缺失交易日并补齐
+        用于处理：任务漏执行、同步失败等场景
+        """
+        # 1. 验证数据连续性
+        validation = await self.validate_data_continuity(symbol, session)
+
+        if not validation.get("last_date"):
+            # 无数据，执行初始加载
+            count = await self.initial_history_load(symbol, session)
+            return {
+                "symbol": symbol,
+                "action": "initial_load",
+                "records": count,
+            }
+
+        # 2. 检查是否有缺失日期（仅看最近 lookback_days 天）
+        last_date = date.fromisoformat(validation["last_date"])
+        cutoff_date = date.today() - timedelta(days=lookback_days)
+        recent_missing = [
+            d for d in validation.get("missing_dates", [])
+            if date.fromisoformat(d) >= cutoff_date
+        ]
+
+        # 3. 检查是否落后于当前日期（排除周末和今天）
+        today = date.today()
+        days_behind = 0
+        check_date = last_date + timedelta(days=1)
+        while check_date < today:
+            if check_date.weekday() < 5:  # 非周末
+                days_behind += 1
+            check_date += timedelta(days=1)
+
+        # 4. 执行回填
+        if recent_missing or days_behind > 0:
+            # 从缺失日期的最早一天开始重新拉取
+            if recent_missing:
+                earliest_missing = min(date.fromisoformat(d) for d in recent_missing)
+                from_date = (earliest_missing - timedelta(days=1)).isoformat()
+            else:
+                from_date = last_date.isoformat()
+
+            count = await self.fetch_and_store_history(symbol, session, from_date=from_date)
+            return {
+                "symbol": symbol,
+                "action": "backfill",
+                "records": count,
+                "missing_filled": len(recent_missing),
+                "days_behind": days_behind,
+            }
+
+        return {
+            "symbol": symbol,
+            "action": "up_to_date",
+            "records": 0,
+        }
+
     async def update_all_watchlist(self, session: AsyncSession) -> Dict[str, int]:
         """更新观察池内所有 active symbol 的数据"""
         query = select(Watchlist).where(Watchlist.is_active == True)
@@ -269,6 +364,70 @@ class DataService:
         for w in symbols:
             count = await self.incremental_update(w.symbol, session)
             results[w.symbol] = count
+
+        return results
+
+    async def robust_update_all(
+        self, session: AsyncSession, validate: bool = True, backfill: bool = True
+    ) -> Dict[str, Any]:
+        """
+        健壮的全量更新：带重试、回填、验证
+        用于调度任务，处理各种异常场景
+        """
+        query = select(Watchlist).where(Watchlist.is_active == True)
+        result = await session.execute(query)
+        symbols = result.scalars().all()
+
+        results = {
+            "success": [],
+            "failed": [],
+            "backfilled": [],
+            "anomalies": [],
+            "total_records": 0,
+        }
+
+        for w in symbols:
+            symbol = w.symbol
+
+            # 1. 智能回填（检测并补齐缺失数据）
+            if backfill:
+                backfill_result = await self.smart_backfill(symbol, session)
+                if backfill_result["action"] == "backfill":
+                    results["backfilled"].append(backfill_result)
+                    results["total_records"] += backfill_result.get("records", 0)
+                    logger.info(
+                        f"Backfilled {symbol}: {backfill_result.get('records', 0)} records, "
+                        f"filled {backfill_result.get('missing_filled', 0)} missing days"
+                    )
+                    continue  # 已回填，跳过增量更新
+
+            # 2. 带重试的增量更新
+            update_result = await self.incremental_update_with_retry(symbol, session)
+
+            if update_result["status"] == "success":
+                results["success"].append(symbol)
+                results["total_records"] += update_result.get("records", 0)
+            else:
+                results["failed"].append({
+                    "symbol": symbol,
+                    "error": update_result.get("error"),
+                })
+
+            # 3. 数据验证（检测异常价格）
+            if validate and update_result["status"] == "success":
+                anomalies = await self.validate_prices(symbol, session)
+                if anomalies:
+                    results["anomalies"].extend(anomalies)
+
+        # 汇总日志
+        logger.info(
+            f"Robust update completed: "
+            f"{len(results['success'])} success, "
+            f"{len(results['failed'])} failed, "
+            f"{len(results['backfilled'])} backfilled, "
+            f"{len(results['anomalies'])} anomalies detected, "
+            f"{results['total_records']} total records"
+        )
 
         return results
 
@@ -352,6 +511,78 @@ class DataService:
             return 100.0
         rs = avg_gain / avg_loss
         return 100 - (100 / (1 + rs))
+
+    # ── Data Continuity Validation ──
+
+    async def validate_data_continuity(
+        self, symbol: str, session: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        验证数据连续性：检测缺失的交易日（排除周末）
+        Returns: {symbol, is_valid, missing_dates, first_date, last_date, total_records}
+        """
+        query = (
+            select(IndexPrice.date)
+            .where(IndexPrice.symbol == symbol)
+            .order_by(IndexPrice.date.asc())
+        )
+        result = await session.execute(query)
+        dates = [row[0] for row in result.fetchall()]
+
+        if not dates:
+            return {
+                "symbol": symbol,
+                "is_valid": False,
+                "missing_dates": [],
+                "first_date": None,
+                "last_date": None,
+                "total_records": 0,
+                "error": "No data available",
+            }
+
+        missing_dates = []
+        first_date = dates[0]
+        last_date = dates[-1]
+        date_set = set(dates)
+
+        # Check each day between first and last date
+        current = first_date
+        while current <= last_date:
+            # Skip weekends (Saturday=5, Sunday=6)
+            if current.weekday() < 5 and current not in date_set:
+                missing_dates.append(current.isoformat())
+                logger.warning(f"Missing trading day for {symbol}: {current.isoformat()}")
+            current += timedelta(days=1)
+
+        is_valid = len(missing_dates) == 0
+
+        return {
+            "symbol": symbol,
+            "is_valid": is_valid,
+            "missing_dates": missing_dates,
+            "first_date": first_date.isoformat(),
+            "last_date": last_date.isoformat(),
+            "total_records": len(dates),
+        }
+
+    async def validate_all_watchlist(
+        self, session: AsyncSession
+    ) -> Dict[str, Dict[str, Any]]:
+        """验证观察池内所有 symbol 的数据连续性"""
+        query = select(Watchlist).where(Watchlist.is_active == True)
+        result = await session.execute(query)
+        symbols = result.scalars().all()
+
+        results = {}
+        for w in symbols:
+            validation = await self.validate_data_continuity(w.symbol, session)
+            results[w.symbol] = validation
+            if not validation["is_valid"]:
+                logger.warning(
+                    f"Data gaps detected for {w.symbol}: {len(validation['missing_dates'])} missing days"
+                )
+
+        return results
 
     # ── Watchlist CRUD ──
 
