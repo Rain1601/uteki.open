@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Typography, Tabs, Tab } from '@mui/material';
-import { Dices as ArenaIcon, LineChart as WatchlistIcon, GitBranch as TimelineIcon, Trophy as LeaderboardIcon, Settings as SettingsIcon, BarChart3 as BacktestIcon, Sparkles as EvaluationIcon } from 'lucide-react';
+import { Dices as ArenaIcon, LineChart as WatchlistIcon, GitBranch as TimelineIcon, Trophy as LeaderboardIcon, Settings as SettingsIcon, BarChart3 as BacktestIcon, Sparkles as EvaluationIcon, Brain as LLMBacktestIcon } from 'lucide-react';
 import { useTheme } from '../theme/ThemeProvider';
 import ArenaView from '../components/index/ArenaView';
 import WatchlistPanel from '../components/index/WatchlistPanel';
@@ -8,6 +8,7 @@ import DecisionTimeline from '../components/index/DecisionTimeline';
 import LeaderboardTable from '../components/index/LeaderboardTable';
 import SettingsPanel from '../components/index/SettingsPanel';
 import BacktestPanel from '../components/index/BacktestPanel';
+import LLMBacktestPanel from '../components/index/LLMBacktestPanel';
 import EvaluationPanel from '../components/index/EvaluationPanel';
 
 const tabs = [
@@ -15,7 +16,8 @@ const tabs = [
   { label: 'Watchlist', icon: <WatchlistIcon size={18} /> },
   { label: 'History', icon: <TimelineIcon size={18} /> },
   { label: 'Leaderboard', icon: <LeaderboardIcon size={18} /> },
-  { label: 'Backtest', icon: <BacktestIcon size={18} /> },
+  { label: 'LLM Backtest', icon: <LLMBacktestIcon size={18} /> },
+  { label: 'DCA Backtest', icon: <BacktestIcon size={18} /> },
   { label: 'Evaluation', icon: <EvaluationIcon size={18} /> },
   { label: 'Settings', icon: <SettingsIcon size={18} /> },
 ];
@@ -85,9 +87,10 @@ export default function IndexAgentPage() {
         {activeTab === 1 && <WatchlistPanel />}
         {activeTab === 2 && <DecisionTimeline />}
         {activeTab === 3 && <LeaderboardTable />}
-        {activeTab === 4 && <BacktestPanel />}
-        {activeTab === 5 && <EvaluationPanel onNavigate={setActiveTab} />}
-        {activeTab === 6 && <SettingsPanel />}
+        {activeTab === 4 && <LLMBacktestPanel />}
+        {activeTab === 5 && <BacktestPanel />}
+        {activeTab === 6 && <EvaluationPanel onNavigate={setActiveTab} />}
+        {activeTab === 7 && <SettingsPanel />}
       </Box>
     </Box>
   );

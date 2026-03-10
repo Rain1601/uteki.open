@@ -13,6 +13,7 @@ from uteki.common.database import SupabaseRepository, db_manager
 from uteki.domains.auth.deps import get_current_user
 from uteki.domains.index.schemas import (
     WatchlistAddRequest, BacktestRequest, BacktestCompareRequest,
+    LLMBacktestRequest,
     PromptUpdateRequest, MemoryWriteRequest, ToolTestRequest,
     ArenaRunRequest, DecisionAdoptRequest, DecisionApproveRequest,
     DecisionSkipRequest, DecisionRejectRequest,
@@ -281,6 +282,86 @@ async def replay_decision(
     return {"success": True, "data": result}
 
 
+# ── LLM Backtest ──
+
+@router.post("/backtest/llm/stream", summary="SSE 流式 LLM 回测")
+async def run_llm_backtest_stream(
+    request: LLMBacktestRequest,
+    user: dict = Depends(get_current_user),
+):
+    from uteki.domains.index.services.llm_backtest_service import get_llm_backtest_service
+    svc = get_llm_backtest_service()
+    user_id = _get_user_id(user)
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def emit_progress(event: dict):
+        queue.put_nowait(event)
+
+    async def run_task():
+        try:
+            result = await svc.run_backtest(
+                year=request.year,
+                initial_capital=request.initial_capital,
+                monthly_contribution=request.monthly_contribution,
+                model_keys=request.model_keys,
+                user_id=user_id,
+                on_progress=emit_progress,
+            )
+            queue.put_nowait({"type": "result", "data": result})
+        except Exception as e:
+            logger.error(f"LLM backtest error: {e}")
+            queue.put_nowait({"type": "error", "message": str(e)})
+        finally:
+            queue.put_nowait(None)
+
+    async def event_generator():
+        task = asyncio.create_task(run_task())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/backtest/llm/runs", summary="获取 LLM 回测历史列表")
+async def get_llm_backtest_runs(
+    limit: int = Query(20, ge=1, le=100),
+    user: dict = Depends(get_current_user),
+):
+    from uteki.domains.index.services.llm_backtest_service import get_llm_backtest_service
+    svc = get_llm_backtest_service()
+    runs = svc.get_runs(_get_user_id(user), limit=limit)
+    return {"success": True, "data": runs}
+
+
+@router.get("/backtest/llm/runs/{run_id}", summary="获取 LLM 回测详情")
+async def get_llm_backtest_detail(
+    run_id: str,
+    user: dict = Depends(get_current_user),
+):
+    from uteki.domains.index.services.llm_backtest_service import get_llm_backtest_service
+    svc = get_llm_backtest_service()
+    detail = svc.get_run_detail(run_id)
+    if not detail:
+        raise HTTPException(404, "Backtest run not found")
+    return {"success": True, "data": detail}
+
+
 # ══════════════════════════════════════════
 # Prompt (system / user)
 # ══════════════════════════════════════════
@@ -466,6 +547,21 @@ async def test_tool(
 # Account & Agent Config
 # ══════════════════════════════════════════
 
+@router.get("/index-account", summary="获取 Index 账户数据（按 watchlist 过滤持仓）")
+async def get_index_account(
+    data_service: DataService = Depends(get_data_service),
+    memory_service: MemoryService = Depends(get_memory_service),
+    prompt_service: PromptService = Depends(get_prompt_service),
+    user: dict = Depends(get_current_user),
+):
+    """返回按 watchlist 过滤的 index 账户视图：现金、index 持仓、非 index 持仓市值"""
+    builder = HarnessBuilder(data_service, memory_service, prompt_service)
+    watchlist = data_service.get_watchlist()
+    watchlist_symbols = [item["symbol"] for item in watchlist]
+    account_info = await builder._get_index_account_info(watchlist_symbols)
+    return {"success": True, "data": account_info}
+
+
 @router.get("/account/summary", summary="获取账户概览（总资产/现金/持仓市值）")
 async def get_account_summary(
     user: dict = Depends(get_current_user),
@@ -574,35 +670,88 @@ async def get_model_config(
     memory_service: MemoryService = Depends(get_memory_service),
     user: dict = Depends(get_current_user),
 ):
-    """从 Memory 读取 model_config 配置列表"""
+    """返回 Arena 生效的模型列表 + per-model web search 设置。
+
+    模型来源优先级: admin.llm_providers → agent_memory (legacy) → hardcoded
+    Web search 设置单独存在 agent_memory (category=web_search_config)。
+    """
     cache = get_cache_service()
     uid = _get_user_id(user)
 
     async def _fetch():
-        try:
-            memories = await memory_service.read(
-                uid, category="model_config", limit=1, agent_key="system"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to read model config: {e}")
-            memories = []
-        if memories:
-            try:
-                models = json.loads(memories[0].get("content", "[]"))
-            except (json.JSONDecodeError, TypeError):
-                models = []
-            if models:
-                return {"success": True, "data": models}
+        # ── 1. Load effective model list (same logic as Arena) ──
+        models: list[dict] = []
 
-        return {
-            "success": True,
-            "data": [],
-            "hint": "尚未配置任何 LLM 模型。请前往「Settings → Model Config」页面添加至少一个模型的 API Key 后使用 Arena 分析。",
-        }
+        # Priority 1: Admin LLM Providers
+        try:
+            from uteki.domains.admin.service import get_llm_provider_service, get_encryption_service
+            llm_svc = get_llm_provider_service()
+            enc = get_encryption_service()
+            admin_models = await llm_svc.get_active_models_for_runtime(encryption_service=enc)
+            if admin_models:
+                models = [
+                    {
+                        "provider": m["provider"],
+                        "model": m["model"],
+                        "api_key": _mask_key(m.get("api_key", "")),
+                        "base_url": m.get("base_url"),
+                        "temperature": m.get("temperature", 0),
+                        "max_tokens": m.get("max_tokens", 4096),
+                        "enabled": True,
+                    }
+                    for m in admin_models
+                ]
+        except Exception as e:
+            logger.warning(f"Failed to load admin models for config UI: {e}")
+
+        # Priority 2: Legacy agent_memory
+        if not models:
+            try:
+                memories = await memory_service.read(
+                    uid, category="model_config", limit=1, agent_key="system"
+                )
+                if memories:
+                    models = json.loads(memories[0].get("content", "[]"))
+            except Exception as e:
+                logger.warning(f"Failed to read model config: {e}")
+
+        if not models:
+            return {
+                "success": True,
+                "data": [],
+                "hint": "尚未配置任何 LLM 模型。请前往 Admin > Models 添加至少一个模型的 API Key。",
+            }
+
+        # ── 2. Load web search settings overlay ──
+        ws_config: dict = {}
+        try:
+            ws_memories = await memory_service.read(
+                uid, category="web_search_config", limit=1, agent_key="system"
+            )
+            if ws_memories:
+                ws_config = json.loads(ws_memories[0].get("content", "{}"))
+        except Exception:
+            pass
+
+        # ── 3. Merge: models + web_search overlay ──
+        for m in models:
+            key = f"{m['provider']}:{m['model']}"
+            ws = ws_config.get(key, {})
+            m["web_search_enabled"] = ws.get("web_search_enabled", False)
+            m["web_search_provider"] = ws.get("web_search_provider", "google")
+
+        return {"success": True, "data": models}
 
     return await cache.get_or_set(
         f"uteki:index:model_config:{uid}:{_today()}", _fetch, ttl=_SHORT_TTL,
     )
+
+
+def _mask_key(key: str) -> str:
+    """Mask API key for display: show first 4 + last 4 chars."""
+    if not key or len(key) <= 12:
+        return "****"
+    return f"{key[:4]}...{key[-4:]}"
 
 
 @router.put("/model-config", summary="保存 Arena 模型配置")
@@ -611,11 +760,16 @@ async def save_model_config(
     memory_service: MemoryService = Depends(get_memory_service),
     user: dict = Depends(get_current_user),
 ):
-    """保存 model_config 到 Memory（覆盖式）"""
+    """保存 model_config 到 Memory（覆盖式）。
+
+    同时提取 web_search 设置存到 web_search_config（供 Arena 运行时读取）。
+    """
     user_id = _get_user_id(user)
     models_json = json.dumps([m.model_dump() for m in request.models])
 
     repo = SupabaseRepository("agent_memory")
+
+    # ── Save full model config (legacy path) ──
     rows = repo.select_data(
         eq={"user_id": user_id, "category": "model_config", "agent_key": "system"},
         limit=1,
@@ -634,6 +788,35 @@ async def save_model_config(
             "user_id": user_id,
             "category": "model_config",
             "content": models_json,
+            "agent_key": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # ── Save web_search overlay (keyed by provider:model) ──
+    ws_config = {}
+    for m in request.models:
+        key = f"{m.provider}:{m.model}"
+        ws_config[key] = {
+            "web_search_enabled": m.web_search_enabled,
+            "web_search_provider": m.web_search_provider or "google",
+        }
+    ws_json = json.dumps(ws_config)
+
+    ws_rows = repo.select_data(
+        eq={"user_id": user_id, "category": "web_search_config", "agent_key": "system"},
+        limit=1,
+    )
+    if ws_rows:
+        repo.update(data={"content": ws_json}, eq={"id": ws_rows[0]["id"]})
+    else:
+        from datetime import datetime, timezone
+        from uuid import uuid4
+        repo.insert({
+            "id": str(uuid4()),
+            "user_id": user_id,
+            "category": "web_search_config",
+            "content": ws_json,
             "agent_key": "system",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),

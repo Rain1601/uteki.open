@@ -330,6 +330,139 @@ export const runBacktestCompare = (params: {
   initial_capital?: number; monthly_dca?: number;
 }) => post<IndexResponse<BacktestResult[]>>('/api/index/backtest/compare', params);
 
+// ── LLM Backtest ──
+
+export interface LLMBacktestStep {
+  month: number;
+  date: string;
+  action: string;
+  allocations?: Record<string, number>;
+  reasoning?: string;
+  portfolio_value: number;
+  cash: number;
+  cost_usd: number;
+}
+
+export interface LLMBacktestModelResult {
+  model_key: string;
+  final_value: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  sharpe_ratio: number;
+  total_cost_usd: number;
+  steps: LLMBacktestStep[];
+}
+
+export interface LLMBacktestBenchmark {
+  final_value: number;
+  return_pct: number;
+  total_invested: number;
+}
+
+export interface LLMBacktestRunResult {
+  id: string;
+  year: number;
+  initial_capital: number;
+  monthly_contribution: number;
+  model_results: LLMBacktestModelResult[];
+  benchmarks: Record<string, LLMBacktestBenchmark>;
+  created_at: string;
+}
+
+export interface LLMBacktestRunSummary {
+  id: string;
+  year: number;
+  initial_capital: number;
+  monthly_contribution: number;
+  model_keys: string[];
+  benchmarks?: Record<string, LLMBacktestBenchmark>;
+  status: string;
+  created_at: string;
+}
+
+export interface LLMBacktestProgressEvent {
+  type: 'phase_start' | 'model_progress' | 'model_complete' | 'status' | 'result' | 'error';
+  phase?: string;
+  model?: string;
+  month?: number;
+  total?: number;
+  total_models?: number;
+  final_value?: number;
+  return_pct?: number;
+  message?: string;
+  data?: LLMBacktestRunResult;
+}
+
+export const runLLMBacktestStream = (
+  params: { year: number; initial_capital: number; monthly_contribution: number; model_keys: string[] },
+  onEvent: (event: LLMBacktestProgressEvent) => void,
+): { cancel: () => void } => {
+  const controller = new AbortController();
+  const token = localStorage.getItem('auth_token');
+
+  (async () => {
+    try {
+      const response = await fetch('/api/index/backtest/llm/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(params),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        onEvent({ type: 'error', message: `HTTP ${response.status}` });
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              onEvent(event);
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      }
+
+      if (buffer.startsWith('data: ')) {
+        try {
+          const event = JSON.parse(buffer.slice(6));
+          onEvent(event);
+        } catch { /* ignore */ }
+      }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        onEvent({ type: 'error', message: e.message || 'Stream failed' });
+      }
+    }
+  })();
+
+  return { cancel: () => controller.abort() };
+};
+
+export const fetchLLMBacktestRuns = (limit = 20) =>
+  get<IndexResponse<LLMBacktestRunSummary[]>>(`/api/index/backtest/llm/runs?limit=${limit}`);
+
+export const fetchLLMBacktestDetail = (runId: string) =>
+  get<IndexResponse<LLMBacktestRunResult>>(`/api/index/backtest/llm/runs/${runId}`);
+
 // ── Prompt (system / user) ──
 
 export const fetchCurrentPrompt = (promptType: string = 'system') =>
@@ -435,12 +568,11 @@ export const runArenaStream = (
   onEvent: (event: ArenaProgressEvent) => void,
 ): { cancel: () => void } => {
   const controller = new AbortController();
-  const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8888';
   const token = localStorage.getItem('auth_token');
 
   (async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/index/arena/run/stream`, {
+      const response = await fetch(`/api/index/arena/run/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -601,6 +733,8 @@ export interface ModelConfig {
   temperature: number;
   max_tokens: number;
   enabled: boolean;
+  web_search_enabled: boolean;
+  web_search_provider: 'native' | 'google';
 }
 
 export const fetchModelConfig = () =>

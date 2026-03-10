@@ -67,6 +67,47 @@ class BacktestCompareRequest(BaseModel):
     monthly_dca: float = Field(0, ge=0)
 
 
+# ── LLM Backtest ──
+
+class LLMBacktestRequest(BaseModel):
+    year: int = Field(..., ge=2020, le=2030)
+    initial_capital: float = Field(10000, gt=0)
+    monthly_contribution: float = Field(0, ge=0)
+    model_keys: List[str] = Field(..., min_length=1, max_length=10,
+                                   description='e.g. ["anthropic:claude-sonnet-4-20250514", "openai:gpt-4o"]')
+
+
+class LLMBacktestStepOut(BaseModel):
+    month: int
+    date: str
+    action: str
+    allocations: Optional[Dict[str, Any]] = None
+    reasoning: Optional[str] = None
+    portfolio_value: float
+    cash: float
+    cost_usd: float
+
+
+class LLMBacktestModelResult(BaseModel):
+    model_key: str
+    final_value: float
+    total_return_pct: float
+    max_drawdown_pct: float
+    sharpe_ratio: float
+    total_cost_usd: float
+    steps: List[LLMBacktestStepOut]
+
+
+class LLMBacktestResult(BaseModel):
+    id: str
+    year: int
+    initial_capital: float
+    monthly_contribution: float
+    model_results: List[LLMBacktestModelResult]
+    benchmarks: Dict[str, Any]
+    created_at: str
+
+
 class BacktestResult(BaseModel):
     symbol: str
     total_return_pct: float
@@ -227,6 +268,8 @@ class ModelConfigEntry(BaseModel):
     temperature: float = Field(0, ge=0, le=2, description="Temperature 0-2")
     max_tokens: int = Field(4096, gt=0, description="Max output tokens")
     enabled: bool = Field(True, description="Whether this model participates in Arena")
+    web_search_enabled: bool = Field(False, description="Enable web search for this model")
+    web_search_provider: Optional[str] = Field("google", description="Web search provider: 'native' or 'google'")
 
 
 class ModelConfigUpdateRequest(BaseModel):
