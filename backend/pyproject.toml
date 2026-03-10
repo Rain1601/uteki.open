@@ -43,6 +43,7 @@ pydantic-settings = "^2.5.0"
 python-multipart = "^0.0.9"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+google-auth = "^2.37.0"
 httpx = "^0.28.1"  # 升级以兼容 ddgs 包
 aiofiles = "^24.1.0"
 # Web research

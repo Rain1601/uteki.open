@@ -146,6 +146,7 @@ class Settings(BaseSettings):
     github_client_secret: Optional[str] = None
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
+    apple_client_id: Optional[str] = None  # Apple App Bundle ID (for aud verification)
     oauth_redirect_base: str = "http://localhost:8888"  # 后端基础URL，用于OAuth回调
 
     @property
