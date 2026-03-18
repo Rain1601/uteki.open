@@ -133,7 +133,8 @@ class NewsAnalysisService:
                     "尚未配置任何 LLM 模型。请前往「Settings → Model Config」页面添加至少一个模型的 API Key。"
                 )
 
-            m = db_models[0]
+            # Prefer deepseek for news analysis (cost-effective + fast)
+            m = next((m for m in db_models if m["provider"] == "deepseek"), db_models[0])
             provider = provider_map.get(m["provider"])
             if not provider:
                 raise ValueError(f"不支持的 LLM provider: {m['provider']}")

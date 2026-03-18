@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, ReactNode 
 import { API_BASE } from '../api/client';
 
 // Login redirects need absolute URL since the browser navigates directly to the backend
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8888';
 
 // Token storage key
 const TOKEN_KEY = 'auth_token';
