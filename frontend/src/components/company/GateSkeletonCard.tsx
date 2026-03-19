@@ -11,16 +11,16 @@ const skeletonKeyframes = `
 }
 `;
 
-function ShimmerLine({ width, theme }: { width: string; theme: any }) {
+function ShimmerLine({ width, theme, delay = 0 }: { width: string; theme: any; delay?: number }) {
   return (
     <Box
       sx={{
-        height: 12,
+        height: 14,
         width,
-        borderRadius: 1,
-        background: `linear-gradient(90deg, ${theme.background.tertiary} 25%, ${theme.border.subtle} 50%, ${theme.background.tertiary} 75%)`,
-        backgroundSize: '200% 100%',
-        animation: 'tl-shimmer 1.5s ease-in-out infinite',
+        borderRadius: 1.5,
+        background: `linear-gradient(90deg, ${theme.background.tertiary} 0%, ${theme.background.tertiary} 40%, rgba(255,255,255,0.18) 50%, ${theme.background.tertiary} 60%, ${theme.background.tertiary} 100%)`,
+        backgroundSize: '300% 100%',
+        animation: `tl-shimmer 1.8s ease-in-out ${delay}s infinite`,
       }}
     />
   );
@@ -49,9 +49,9 @@ export default function GateSkeletonCard({ theme }: Props) {
           gap: 1,
         }}
       >
-        <ShimmerLine width="70%" theme={theme} />
-        <ShimmerLine width="90%" theme={theme} />
-        <ShimmerLine width="50%" theme={theme} />
+        <ShimmerLine width="70%" theme={theme} delay={0} />
+        <ShimmerLine width="90%" theme={theme} delay={0.2} />
+        <ShimmerLine width="50%" theme={theme} delay={0.4} />
       </Box>
     </Box>
   );

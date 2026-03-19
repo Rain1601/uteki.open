@@ -46,6 +46,10 @@ const timelineKeyframes = `
   0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3); }
   50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
 }
+@keyframes tl-line-sweep {
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
+}
 `;
 
 interface Props {
@@ -59,6 +63,7 @@ interface Props {
   isDbRunning?: boolean;
   elapsedMs: number;
   onOpenReport: () => void;
+  onGateClick?: (gateNum: number) => void;
 }
 
 const SKILL_ORDER = [
@@ -82,6 +87,7 @@ export default function ThinkingTimeline({
   isDbRunning,
   elapsedMs,
   onOpenReport,
+  onGateClick,
 }: Props) {
   const { theme } = useTheme();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -207,13 +213,19 @@ export default function ThinkingTimeline({
                       sx={{
                         flex: 1,
                         height: 1.5,
-                        bgcolor:
-                          (gateStatuses[gate + 1] && gateStatuses[gate + 1] !== 'pending')
-                            ? '#22c55e'
-                            : isDone ? '#22c55e' : theme.border.subtle,
-                        transition: 'background-color 0.3s ease',
                         mx: 0.3,
                         mt: -1.5,
+                        transition: 'background-color 0.3s ease',
+                        ...(isActive ? {
+                          background: `linear-gradient(90deg, ${theme.brand.primary}, ${theme.brand.primary}40, ${theme.border.subtle})`,
+                          backgroundSize: '200% 100%',
+                          animation: 'tl-line-sweep 2s ease-in-out infinite',
+                        } : {
+                          bgcolor:
+                            (gateStatuses[gate + 1] && gateStatuses[gate + 1] !== 'pending')
+                              ? '#22c55e'
+                              : isDone ? '#22c55e' : theme.border.subtle,
+                        }),
                       }}
                     />
                   )}
@@ -367,6 +379,7 @@ export default function ThinkingTimeline({
                 gateNum={gateNum}
                 result={result}
                 theme={theme}
+                onClick={onGateClick ? () => onGateClick(gateNum) : undefined}
               />
             )}
 

@@ -209,7 +209,8 @@ class ToolExecutor:
         end = date.today().isoformat()
         start = (date.today() - timedelta(days=days)).isoformat()
         data = self.data_service.get_history(args["symbol"], start=start, end=end)
-        return {"symbol": args["symbol"], "period": period, "count": len(data), "prices": data[-20:]}  # 限制返回量
+        return {"symbol": args["symbol"], "period"
+        : period, "count": len(data), "prices": data[-20:]}  # 限制返回量
 
     async def _run_backtest(self, args: Dict) -> Any:
         return await self.backtest_service.run(

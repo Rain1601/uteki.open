@@ -1,11 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
+import {
+  Box, Typography,
+  Table, TableHead, TableBody, TableRow, TableCell, TableContainer,
+  IconButton,
+} from '@mui/material';
+import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
 import { useTheme } from '../theme/ThemeProvider';
 import CompanyAnalysisForm from '../components/company/CompanyAnalysisForm';
 import { type GateStatus } from '../components/company/GateProgressTracker';
 import ThinkingTimeline from '../components/company/ThinkingTimeline';
 import ReportPanel from '../components/company/ReportPanel';
-import AnalysisRecordCard from '../components/company/AnalysisRecordCard';
 import {
   analyzeCompanyStream,
   listCompanyAnalyses,
@@ -24,6 +28,10 @@ const spinKeyframes = `
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+@keyframes analyzing-pulse {
+  0%, 100% { background-color: rgba(59,130,246,0.08); }
+  50% { background-color: rgba(59,130,246,0.18); }
 }`;
 
 interface RunningAnalysis {
@@ -53,6 +61,19 @@ const SKILL_ORDER = [
   'final_verdict',
 ] as const;
 
+const ACTION_COLORS: Record<string, string> = {
+  BUY: '#22c55e',
+  WATCH: '#f59e0b',
+  AVOID: '#ef4444',
+};
+
+const QUALITY_LABELS: Record<string, string> = {
+  EXCELLENT: 'EX',
+  GOOD: 'GD',
+  MEDIOCRE: 'MD',
+  POOR: 'PR',
+};
+
 export default function CompanyAgentPage() {
   const { theme } = useTheme();
 
@@ -72,11 +93,15 @@ export default function CompanyAgentPage() {
 
   // Report panel state
   const [reportOpen, setReportOpen] = useState(false);
+  const [scrollToGate, setScrollToGate] = useState<number | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const runIdCounter = useRef(0);
   const runningRef = useRef(runningAnalyses);
   runningRef.current = runningAnalyses;
+
+  // Are we in "detail" view?
+  const isDetailView = !!viewingRunId || !!selectedId;
 
   // Load history on mount
   useEffect(() => {
@@ -412,6 +437,14 @@ export default function CompanyAgentPage() {
     }
   }, [selectedId]);
 
+  const handleBackToList = useCallback(() => {
+    setSelectedId(null);
+    setSelectedDetail(null);
+    setViewingRunId(null);
+    setReportOpen(false);
+    setScrollToGate(null);
+  }, []);
+
   // Determine what to display
   const viewingRun = viewingRunId ? runningAnalyses.get(viewingRunId) : null;
   const isViewingRunning = !!viewingRun;
@@ -434,7 +467,6 @@ export default function CompanyAgentPage() {
   } : null);
 
   // Build gate statuses for ThinkingTimeline
-  // For running analysis: use live gateStatuses; for saved record: build "all complete" statuses
   const isDbRunning = !isViewingRunning && selectedDetail?.status === 'running';
 
   const displayGateStatuses: Record<number, GateStatus> = isViewingRunning
@@ -453,7 +485,6 @@ export default function CompanyAgentPage() {
                 result.parse_status === 'error' ? 'error' : 'complete';
             }
           }
-          // For DB-running records with partial results, mark next gate as running
           if (isDbRunning) {
             const completedGates = Object.keys(statuses).length;
             if (completedGates < 7) {
@@ -462,7 +493,6 @@ export default function CompanyAgentPage() {
           }
           return statuses;
         }
-        // DB-running record with no gate data yet — show all pending + gate 1 running
         if (isDbRunning) {
           const statuses: Record<number, GateStatus> = {};
           for (let i = 1; i <= 7; i++) statuses[i] = 'pending';
@@ -485,8 +515,19 @@ export default function CompanyAgentPage() {
   const isComplete = isViewingRunning ? !!viewingRun!.result : (!!displayResult && !isDbRunning);
 
   const runningCount = runningAnalyses.size;
-  const hasRecords = analyses.length > 0 || runningCount > 0;
   const hasTimeline = Object.keys(displayGateStatuses).length > 0 || displayCompanyInfo != null || !!displayError || isDbRunning;
+
+  // Helper formatters for list view
+  const formatTime = (ms: number) => {
+    const s = Math.round(ms / 1000);
+    return s >= 60 ? `${Math.floor(s / 60)}m${s % 60}s` : `${s}s`;
+  };
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  };
+
+  // ──────────── Render ────────────
 
   return (
     <Box
@@ -503,143 +544,232 @@ export default function CompanyAgentPage() {
     >
       <style>{spinKeyframes}</style>
 
-      {/* Header */}
-      <Box sx={{ px: 3, pt: 3, pb: 1.5 }}>
-        <Typography sx={{ fontSize: 22, fontWeight: 600, mb: 2 }}>
-          Company Investment Agent
-        </Typography>
-        <CompanyAnalysisForm
-          onAnalyze={handleAnalyze}
-          isRunning={false}
-          runningCount={runningCount}
-          elapsedMs={viewingRun?.elapsedMs || 0}
-        />
-      </Box>
-
-      {/* Records strip */}
-      {hasRecords && (
-        <Box
-          sx={{
-            px: 3,
-            py: 1.5,
-            borderBottom: `1px solid ${theme.border.subtle}`,
-            display: 'flex',
-            gap: 1,
-            overflowX: 'auto',
-            overflowY: 'hidden',
-            '&::-webkit-scrollbar': { height: 4 },
-            '&::-webkit-scrollbar-thumb': { bgcolor: theme.border.default, borderRadius: 2 },
-          }}
-        >
-          {/* Running analyses first */}
-          {Array.from(runningAnalyses.values()).map((ra) => (
-            <AnalysisRecordCard
-              key={ra.id}
-              running={{
-                symbol: ra.symbol,
-                provider: ra.provider,
-                currentGate: ra.currentGate,
-                gateStatuses: ra.gateStatuses,
-              }}
-              selected={viewingRunId === ra.id}
-              onClick={() => { setSelectedId(null); setViewingRunId(ra.id); setReportOpen(false); }}
+      {/* ════════ LIST VIEW ════════ */}
+      {!isDetailView && (
+        <Box sx={{ flex: 1, overflow: 'auto' }}>
+          {/* Header + form — centered */}
+          <Box sx={{ maxWidth: 780, mx: 'auto', px: 3, pt: 4, pb: 3 }}>
+            <Typography sx={{ fontSize: 22, fontWeight: 600, mb: 2 }}>
+              Company Investment Agent
+            </Typography>
+            <CompanyAnalysisForm
+              onAnalyze={handleAnalyze}
+              isRunning={false}
+              runningCount={runningCount}
+              elapsedMs={0}
             />
-          ))}
+          </Box>
 
-          {/* Saved records (skip those backed by a live SSE stream to avoid duplicates) */}
-          {analyses
-            .filter((a) => {
-              if (a.status !== 'running') return true;
-              // Hide if there's a local SSE stream for this DB record
-              return !Array.from(runningAnalyses.values()).some((ra) => ra.analysisId === a.id);
-            })
-            .map((a) => (
-              <AnalysisRecordCard
-                key={a.id}
-                record={a}
-                selected={selectedId === a.id && !viewingRunId}
-                onClick={() => { setViewingRunId(null); setSelectedId(a.id); }}
-                onDelete={() => handleDeleteAnalysis(a.id)}
-              />
-            ))}
-        </Box>
-      )}
-
-      {/* Main content area: Timeline + Report Panel */}
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-        {/* Left: Timeline area */}
-        <Box
-          sx={{
-            flex: reportOpen ? '0 0 45%' : '1 1 auto',
-            overflow: 'auto',
-            transition: 'flex 0.3s ease',
-            display: 'flex',
-            justifyContent: 'center',
-            '&::-webkit-scrollbar': { width: 6 },
-            '&::-webkit-scrollbar-thumb': { bgcolor: theme.border.default, borderRadius: 3 },
-          }}
-        >
-          <Box sx={{ maxWidth: reportOpen ? '100%' : 720, width: '100%', px: 3, py: 2 }}>
-            {/* Loading detail */}
-            {loadingDetail && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <Typography sx={{ fontSize: 13, color: theme.text.muted }}>Loading...</Typography>
-              </Box>
-            )}
-
-            {/* ThinkingTimeline */}
-            {hasTimeline && (
-              <ThinkingTimeline
-                gateStatuses={displayGateStatuses}
-                gateResults={displayGateResults}
-                streamingTexts={displayStreamingTexts}
-                currentGate={displayCurrentGate}
-                companyInfo={displayCompanyInfo}
-                error={displayError}
-                isComplete={isComplete}
-                isDbRunning={isDbRunning}
-                elapsedMs={isViewingRunning ? (viewingRun!.elapsedMs) : (displayResult?.total_latency_ms || 0)}
-                onOpenReport={() => setReportOpen(true)}
-              />
-            )}
-
-            {/* Empty state */}
-            {!isViewingRunning && !selectedId && !loadingHistory && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '60%',
-                  flexDirection: 'column',
-                  gap: 1,
-                }}
-              >
-                <Typography sx={{ fontSize: 16, fontWeight: 500, color: theme.text.muted }}>
-                  7-Gate Decision Tree Analysis
-                </Typography>
-                <Typography sx={{ fontSize: 13, color: theme.text.disabled }}>
-                  {analyses.length > 0 ? '选择一条记录查看详情，或输入股票代码开始新分析' : '输入股票代码开始分析'}
+          {/* Records table — centered */}
+          <Box sx={{ maxWidth: 780, mx: 'auto', px: 3, pb: 4 }}>
+            {loadingHistory ? (
+              <Typography sx={{ fontSize: 13, color: theme.text.muted, textAlign: 'center', py: 4 }}>
+                Loading...
+              </Typography>
+            ) : analyses.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <Typography sx={{ fontSize: 15, color: theme.text.muted }}>暂无分析记录</Typography>
+                <Typography sx={{ fontSize: 13, color: theme.text.disabled, mt: 0.5 }}>
+                  输入股票代码开始第一次分析
                 </Typography>
               </Box>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ color: theme.text.disabled, fontSize: 12, fontWeight: 500, borderColor: theme.border.subtle, width: 72 }}>代码</TableCell>
+                      <TableCell sx={{ color: theme.text.disabled, fontSize: 12, fontWeight: 500, borderColor: theme.border.subtle }}>公司</TableCell>
+                      <TableCell sx={{ color: theme.text.disabled, fontSize: 12, fontWeight: 500, borderColor: theme.border.subtle, width: 80 }}>模型</TableCell>
+                      <TableCell sx={{ color: theme.text.disabled, fontSize: 12, fontWeight: 500, borderColor: theme.border.subtle, width: 100 }}>判定</TableCell>
+                      <TableCell sx={{ color: theme.text.disabled, fontSize: 12, fontWeight: 500, borderColor: theme.border.subtle, width: 72 }}>耗时</TableCell>
+                      <TableCell sx={{ color: theme.text.disabled, fontSize: 12, fontWeight: 500, borderColor: theme.border.subtle, width: 80 }}>日期</TableCell>
+                      <TableCell sx={{ borderColor: theme.border.subtle, width: 40, p: 0 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {analyses
+                      .filter((a) => {
+                        if (a.status !== 'running') return true;
+                        return !Array.from(runningAnalyses.values()).some((ra) => ra.analysisId === a.id);
+                      })
+                      .map((a) => {
+                        const actionColor = ACTION_COLORS[a.verdict_action] || theme.text.muted;
+                        const isRunningRecord = a.status === 'running';
+                        return (
+                          <TableRow
+                            key={a.id}
+                            hover
+                            onClick={() => { setViewingRunId(null); setSelectedId(a.id); }}
+                            sx={{
+                              cursor: 'pointer',
+                              '& .MuiTableCell-root': { borderColor: theme.border.subtle, py: 1.25 },
+                              '&:hover .row-delete': { opacity: 1 },
+                            }}
+                          >
+                            <TableCell sx={{ fontSize: 13, fontWeight: 700, color: theme.text.primary }}>
+                              {a.symbol}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: 13, color: theme.text.secondary, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {a.company_name || '—'}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: 12, color: theme.text.muted }}>
+                              {a.provider}
+                            </TableCell>
+                            <TableCell>
+                              {isRunningRecord ? (
+                                <Box sx={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                                  px: 1, py: 0.3, borderRadius: '6px',
+                                  animation: 'analyzing-pulse 2s ease-in-out infinite',
+                                }}>
+                                  <Loader2 size={12} color={theme.brand.primary} style={{ animation: 'spin 1s linear infinite' }} />
+                                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.brand.primary }}>分析中</Typography>
+                                </Box>
+                              ) : (
+                                <Box sx={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 0.4,
+                                  px: 1, py: 0.2, borderRadius: '4px', bgcolor: `${actionColor}15`,
+                                }}>
+                                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: actionColor, lineHeight: 1.5 }}>
+                                    {a.verdict_action}
+                                  </Typography>
+                                  {a.verdict_quality && (
+                                    <Typography sx={{ fontSize: 10, color: actionColor, opacity: 0.6 }}>
+                                      {QUALITY_LABELS[a.verdict_quality] || ''}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: 12, color: theme.text.muted, fontVariantNumeric: 'tabular-nums' }}>
+                              {isRunningRecord ? '—' : formatTime(a.total_latency_ms)}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: 12, color: theme.text.disabled }}>
+                              {formatDate(a.created_at)}
+                            </TableCell>
+                            <TableCell sx={{ p: 0, textAlign: 'center' }}>
+                              <IconButton
+                                className="row-delete"
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteAnalysis(a.id); }}
+                                sx={{
+                                  opacity: 0,
+                                  color: theme.text.disabled,
+                                  transition: 'opacity 0.1s, color 0.1s',
+                                  '&:hover': { color: '#ef4444' },
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
           </Box>
         </Box>
+      )}
 
-        {/* Right: Report Panel */}
-        <ReportPanel
-          open={reportOpen}
-          onClose={() => setReportOpen(false)}
-          skills={displaySkills}
-          verdict={displayVerdict}
-          companyInfo={displayCompanyInfo}
-          totalLatencyMs={displayResult?.total_latency_ms}
-          modelUsed={displayResult?.model_used}
-          dataFreshness={displayResult?.data_freshness}
-          toolCallsCount={displayResult?.tool_calls?.length}
-        />
-      </Box>
+      {/* ════════ DETAIL VIEW ════════ */}
+      {isDetailView && (
+        <>
+          {/* Top bar with back button + form */}
+          <Box sx={{ px: 3, pt: 2, pb: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box
+              onClick={handleBackToList}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                cursor: 'pointer',
+                color: theme.text.muted,
+                flexShrink: 0,
+                py: 0.5,
+                px: 1,
+                borderRadius: 1,
+                transition: 'all 0.12s',
+                '&:hover': { color: theme.text.primary, bgcolor: `${theme.text.primary}08` },
+              }}
+            >
+              <ArrowLeft size={16} />
+              <Typography sx={{ fontSize: 13, fontWeight: 500 }}>返回</Typography>
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <CompanyAnalysisForm
+                onAnalyze={handleAnalyze}
+                isRunning={false}
+                runningCount={runningCount}
+                elapsedMs={viewingRun?.elapsedMs || 0}
+              />
+            </Box>
+          </Box>
+
+          {/* Main content area: Timeline + Report Panel */}
+          <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+            {/* Left: Timeline area */}
+            <Box
+              sx={{
+                flex: reportOpen ? '0 0 45%' : '1 1 auto',
+                overflow: 'auto',
+                transition: 'flex 0.3s ease',
+                display: 'flex',
+                justifyContent: 'center',
+                '&::-webkit-scrollbar': { width: 6 },
+                '&::-webkit-scrollbar-thumb': { bgcolor: theme.border.default, borderRadius: 3 },
+              }}
+            >
+              <Box sx={{ maxWidth: reportOpen ? '100%' : 720, width: '100%', px: 3, py: 2 }}>
+                {/* Loading detail */}
+                {loadingDetail && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <Typography sx={{ fontSize: 13, color: theme.text.muted }}>Loading...</Typography>
+                  </Box>
+                )}
+
+                {/* ThinkingTimeline */}
+                {hasTimeline && (
+                  <ThinkingTimeline
+                    gateStatuses={displayGateStatuses}
+                    gateResults={displayGateResults}
+                    streamingTexts={displayStreamingTexts}
+                    currentGate={displayCurrentGate}
+                    companyInfo={displayCompanyInfo}
+                    error={displayError}
+                    isComplete={isComplete}
+                    isDbRunning={isDbRunning}
+                    elapsedMs={isViewingRunning ? (viewingRun!.elapsedMs) : (displayResult?.total_latency_ms || 0)}
+                    onOpenReport={() => setReportOpen(true)}
+                    onGateClick={(gateNum) => {
+                      setReportOpen(true);
+                      setScrollToGate(gateNum);
+                    }}
+                  />
+                )}
+              </Box>
+            </Box>
+
+            {/* Right: Report Panel */}
+            <ReportPanel
+              open={reportOpen}
+              onClose={() => setReportOpen(false)}
+              skills={displaySkills}
+              verdict={displayVerdict}
+              companyInfo={displayCompanyInfo}
+              totalLatencyMs={displayResult?.total_latency_ms}
+              modelUsed={displayResult?.model_used}
+              dataFreshness={displayResult?.data_freshness}
+              toolCallsCount={displayResult?.tool_calls?.length}
+              scrollToGate={scrollToGate}
+              onScrollToGateConsumed={() => setScrollToGate(null)}
+            />
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

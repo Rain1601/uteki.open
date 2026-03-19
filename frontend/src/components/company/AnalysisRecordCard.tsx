@@ -5,9 +5,9 @@ import type { CompanyAnalysisSummary } from '../../api/company';
 import type { GateStatus } from './GateProgressTracker';
 
 const ACTION_COLORS: Record<string, string> = {
-  BUY: '#4caf50',
-  WATCH: '#ff9800',
-  AVOID: '#f44336',
+  BUY: '#22c55e',
+  WATCH: '#f59e0b',
+  AVOID: '#ef4444',
 };
 
 const QUALITY_LABELS: Record<string, string> = {
@@ -51,113 +51,138 @@ export default function AnalysisRecordCard({ record, running, selected, onClick,
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    if (diff < 3600_000) return `${Math.round(diff / 60000)}m ago`;
-    if (diff < 86400_000) return `${Math.round(diff / 3600_000)}h ago`;
-    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    return `${d.getMonth() + 1}/${d.getDate()}`;
   };
 
   return (
     <Box
       onClick={onClick}
       sx={{
-        position: 'relative',
-        minWidth: 120,
-        maxWidth: 140,
-        px: 1.5,
-        py: 1.25,
-        borderRadius: 2,
-        bgcolor: selected ? `${theme.brand.primary}18` : theme.background.tertiary,
-        border: `1.5px solid ${selected ? theme.brand.primary : theme.border.subtle}`,
+        display: 'flex',
+        alignItems: 'center',
+        height: 36,
+        px: 2,
         cursor: 'pointer',
-        flexShrink: 0,
-        transition: 'all 0.15s',
+        transition: 'background-color 0.1s',
+        bgcolor: selected ? `${theme.brand.primary}12` : 'transparent',
         '&:hover': {
-          borderColor: theme.brand.primary,
-          bgcolor: `${theme.brand.primary}10`,
-          '& .delete-btn': { opacity: 1 },
+          bgcolor: selected ? `${theme.brand.primary}18` : theme.background.hover || `${theme.text.primary}08`,
+          '& .record-delete': { opacity: 1 },
         },
       }}
     >
-      {/* Delete button */}
-      {record && onDelete && (
-        <IconButton
-          className="delete-btn"
-          size="small"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          sx={{
-            position: 'absolute',
-            top: 2,
-            right: 2,
-            opacity: 0,
-            p: 0.25,
-            color: theme.text.muted,
-            '&:hover': { color: theme.status.error },
-          }}
-        >
-          <X size={12} />
-        </IconButton>
-      )}
+      {/* Selected indicator dot */}
+      <Box sx={{
+        width: 4,
+        height: 4,
+        borderRadius: '50%',
+        bgcolor: selected ? theme.brand.primary : 'transparent',
+        mr: 1.5,
+        flexShrink: 0,
+      }} />
 
       {/* Symbol */}
-      <Typography sx={{ fontSize: 13, fontWeight: 700, color: theme.text.primary, lineHeight: 1.2 }}>
+      <Typography sx={{
+        fontSize: 13,
+        fontWeight: 600,
+        color: selected ? theme.brand.primary : theme.text.primary,
+        width: 56,
+        flexShrink: 0,
+        whiteSpace: 'nowrap',
+      }}>
         {symbol}
       </Typography>
 
-      {/* Provider */}
-      <Typography sx={{ fontSize: 10, color: theme.text.muted, mt: 0.25 }}>
+      {/* Provider chip */}
+      <Typography sx={{
+        fontSize: 10,
+        color: theme.text.disabled,
+        bgcolor: `${theme.text.primary}08`,
+        px: 0.75,
+        py: 0.15,
+        borderRadius: 0.5,
+        width: 60,
+        textAlign: 'center',
+        flexShrink: 0,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}>
         {provider}
       </Typography>
 
-      {/* Running state or verdict */}
-      {isRunning ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
-          <Loader2 size={12} color={theme.brand.primary} style={{ animation: 'spin 1s linear infinite' }} />
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.brand.primary }}>
-            G{running.currentGate || completedGates + 1}/7
-          </Typography>
-        </Box>
-      ) : record ? (
-        record.status === 'running' ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
-            <Loader2 size={12} color={theme.brand.primary} style={{ animation: 'spin 1s linear infinite' }} />
+      {/* Status area */}
+      <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+        {isRunning ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Loader2 size={11} color={theme.brand.primary} style={{ animation: 'spin 1s linear infinite' }} />
             <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.brand.primary }}>
-              分析中...
+              Gate {running.currentGate || completedGates + 1}/7
             </Typography>
           </Box>
-        ) : (
-          <>
-            {/* Verdict badge */}
-            <Box
-              sx={{
-                display: 'inline-block',
-                mt: 0.75,
-                px: 1,
-                py: 0.15,
-                borderRadius: 1,
-                bgcolor: `${actionColor}20`,
-                color: actionColor,
-                fontSize: 11,
-                fontWeight: 700,
-                lineHeight: 1.4,
-              }}
-            >
-              {record.verdict_action}
-              {record.verdict_quality && (
-                <Typography component="span" sx={{ fontSize: 9, ml: 0.5, opacity: 0.7 }}>
-                  {QUALITY_LABELS[record.verdict_quality] || ''}
-                </Typography>
-              )}
+        ) : record ? (
+          record.status === 'running' ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Loader2 size={11} color={theme.brand.primary} style={{ animation: 'spin 1s linear infinite' }} />
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.brand.primary }}>分析中</Typography>
             </Box>
+          ) : (
+            <>
+              {/* Verdict pill */}
+              <Box sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.4,
+                px: 0.8,
+                py: 0.1,
+                borderRadius: '4px',
+                bgcolor: `${actionColor}18`,
+                border: `1px solid ${actionColor}30`,
+              }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: actionColor, lineHeight: 1.5 }}>
+                  {record.verdict_action}
+                </Typography>
+                {record.verdict_quality && (
+                  <Typography sx={{ fontSize: 9, color: actionColor, opacity: 0.6, lineHeight: 1 }}>
+                    {QUALITY_LABELS[record.verdict_quality] || ''}
+                  </Typography>
+                )}
+              </Box>
+            </>
+          )
+        ) : null}
+      </Box>
 
-            {/* Meta line */}
-            <Typography sx={{ fontSize: 9, color: theme.text.disabled, mt: 0.5 }}>
-              {formatTime(record.total_latency_ms)} · {formatDate(record.created_at)}
-            </Typography>
-          </>
-        )
-      ) : null}
+      {/* Right side: time + date */}
+      {record && record.status !== 'running' && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 1 }}>
+          <Typography sx={{ fontSize: 10, color: theme.text.disabled, fontVariantNumeric: 'tabular-nums' }}>
+            {formatTime(record.total_latency_ms)}
+          </Typography>
+          <Typography sx={{ fontSize: 10, color: theme.text.disabled, fontVariantNumeric: 'tabular-nums' }}>
+            {formatDate(record.created_at)}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Delete */}
+      {record && onDelete && (
+        <IconButton
+          className="record-delete"
+          size="small"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          sx={{
+            opacity: 0,
+            p: 0.3,
+            ml: 0.5,
+            color: theme.text.disabled,
+            transition: 'opacity 0.1s, color 0.1s',
+            '&:hover': { color: theme.status.error || '#ef4444' },
+          }}
+        >
+          <X size={11} />
+        </IconButton>
+      )}
     </Box>
   );
 }

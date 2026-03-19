@@ -6,7 +6,7 @@ Architecture:
 - Gate 7:    读取全部 6 份分析报告 → 投资裁决 + 全量结构化 JSON
 
 Supports:
-- Tool-use loop (web_search) for gates 2-6
+- Tool-use loop (web_search) for gates 1-6
 - on_progress callback for SSE streaming
 - Progressive context accumulation between gates
 """
@@ -28,6 +28,22 @@ from .output_parser import parse_skill_output
 from .financials import format_company_data_for_prompt
 
 logger = logging.getLogger(__name__)
+
+# ── Core Conclusion Extractor ─────────────────────────────────────────────
+
+_CORE_CONCLUSION_RE = re.compile(
+    r'【核心结论】[*\s]*\n(.*?)(?:\n\n|\n【|\Z)', re.DOTALL
+)
+
+
+def _extract_core_conclusion(raw: str) -> str | None:
+    """Extract the 【核心结论】 paragraph from a gate's raw output."""
+    m = _CORE_CONCLUSION_RE.search(raw)
+    if m:
+        text = m.group(1).strip()
+        if text:
+            return text
+    return None
 
 SKILL_TIMEOUT = 120       # seconds per skill (including tool rounds)
 SKILL_TIMEOUT_GATE7 = 300  # Gate 7 reads all 6 reports + generates structured JSON
@@ -222,12 +238,12 @@ class CompanySkillRunner:
                     parts.append(f"\n\n───── Gate {prev['gate']}: {prev['display_name']} ─────")
                     parts.append(prev.get("raw", "(no output)"))
             else:
-                # Gates 2-6: brief summaries from prior gates
+                # Gates 2-6: core conclusions from prior gates (fallback to raw[:800])
                 parts.append("\n\n══ 前序分析结论（请在此基础上深化而非重复）══")
                 for prev in accumulated:
                     parts.append(f"\n【Gate {prev['gate']}: {prev['display_name']}】")
-                    summary = prev.get("summary", "")
-                    parts.append(f"结论: {summary}")
+                    conclusion = prev.get("core_conclusion") or prev.get("summary", "")
+                    parts.append(f"结论: {conclusion}")
 
         return "\n".join(parts)
 
@@ -371,8 +387,34 @@ class CompanySkillRunner:
             raw = ""
             tool_calls: list[dict] = []
             error_detail: Optional[str] = None
+            original_adapter = None  # track adapter swap for Gate 7
 
             try:
+                # Gate 7: use larger max_tokens to avoid JSON truncation
+                # Provider-specific limits (some APIs cap at 8192)
+                _GATE7_MAX_TOKENS: dict[str, int] = {
+                    "deepseek": 8192,
+                    "qwen":     8192,
+                    "minimax":  8192,
+                    "doubao":   8192,
+                }
+                if skill.gate_number == 7:
+                    original_adapter = self._adapter
+                    self._adapter = None  # force re-creation
+                    provider_name = self.model_config["provider"]
+                    provider = _PROVIDER_MAP.get(provider_name)
+                    base_url = self.model_config.get("base_url")
+                    if provider_name == "google" and not base_url:
+                        base_url = getattr(settings, "google_api_base_url", None)
+                    gate7_tokens = _GATE7_MAX_TOKENS.get(provider_name, 16384)
+                    self._adapter = LLMAdapterFactory.create_adapter(
+                        provider=provider,
+                        api_key=self.model_config["api_key"],
+                        model=self.model_config["model"],
+                        config=LLMConfig(temperature=0, max_tokens=gate7_tokens),
+                        base_url=base_url,
+                    )
+
                 user_message = self._build_user_message(skill, accumulated)
                 is_anthropic = self.model_config.get("provider") == "anthropic"
 
@@ -410,6 +452,10 @@ class CompanySkillRunner:
                 logger.error(f"[company_pipeline] ERROR: {skill.skill_name}: {e}", exc_info=True)
                 parsed, parse_status = None, "error"
                 error_detail = str(e)
+            finally:
+                # Restore original adapter after Gate 7's enlarged-token run
+                if original_adapter is not None:
+                    self._adapter = original_adapter
 
             latency_ms = int((time.time() - skill_start) * 1000)
             parsed_dict = parsed.model_dump() if parsed else {}
@@ -429,13 +475,15 @@ class CompanySkillRunner:
             results[skill.skill_name] = skill_result
 
             # Accumulate context for next gates
-            summary = raw[:400] if raw else "(no output)"
+            core_conclusion = _extract_core_conclusion(raw) if raw else None
+            summary = core_conclusion or (raw[:800] if raw else "(no output)")
             accumulated.append({
                 "gate": skill.gate_number,
                 "skill": skill.skill_name,
                 "display_name": skill.display_name,
-                "raw": raw,        # full text for Gate 7
-                "summary": summary, # brief for Gates 2-6
+                "raw": raw,                    # full text for Gate 7
+                "summary": summary,            # fallback for Gates 2-6
+                "core_conclusion": core_conclusion,  # preferred for Gates 2-6
             })
 
             # Emit gate_complete — include raw text for all gates

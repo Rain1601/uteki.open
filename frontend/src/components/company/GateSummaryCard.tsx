@@ -1,14 +1,13 @@
-import { useState } from 'react';
-import { Box, Typography, Collapse } from '@mui/material';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Box, Typography } from '@mui/material';
+import { ChevronRight } from 'lucide-react';
 import { StatusBadge } from './ui';
-import FormattedText from './FormattedText';
 import type { GateResult } from '../../api/company';
 
 interface Props {
   gateNum: number;
   result: GateResult;
   theme: any;
+  onClick?: () => void;
 }
 
 // ── Metric chip ──
@@ -142,35 +141,36 @@ function extractGateInfo(gateNum: number, result: GateResult) {
   }
 }
 
-export default function GateSummaryCard({ gateNum, result, theme }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export default function GateSummaryCard({ gateNum, result, theme, onClick }: Props) {
   const info = extractGateInfo(gateNum, result);
-  const hasRawText = !!(result.raw && result.raw.length > 0);
+  const hasBadgeOrMetrics = (info.badge && info.badge.value) || info.metrics.length > 0;
 
   return (
     <Box
+      onClick={onClick}
       sx={{
-        ml: '32px',
-        pl: 2,
-        mt: 0.5,
-        mb: 1,
+        ml: '36px',
+        mt: 0.25,
+        mb: 0.25,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        py: 0.75,
+        px: 1.5,
+        borderRadius: '6px',
+        borderLeft: `2px solid ${theme.border.subtle}`,
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'all 0.15s',
         animation: 'tl-card-in 0.3s ease-out',
+        '&:hover': onClick ? {
+          bgcolor: theme.background.secondary,
+          borderLeftColor: theme.brand.primary,
+        } : {},
       }}
     >
-      <Box
-        onClick={hasRawText ? () => setExpanded(!expanded) : undefined}
-        sx={{
-          p: 2,
-          bgcolor: theme.background.secondary,
-          borderRadius: 2,
-          border: `1px solid ${theme.border.subtle}`,
-          cursor: hasRawText ? 'pointer' : 'default',
-          transition: 'border-color 0.2s',
-          '&:hover': hasRawText ? { borderColor: theme.border.default } : {},
-        }}
-      >
-        {/* Top row: badge + metrics */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      {/* Badge + metrics cluster */}
+      {hasBadgeOrMetrics && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
           {info.badge && info.badge.value && (
             <StatusBadge
               variant={GATE_BADGE_VARIANT[info.badge.type] || 'score'}
@@ -184,51 +184,32 @@ export default function GateSummaryCard({ gateNum, result, theme }: Props) {
             </Box>
           ))}
         </Box>
+      )}
 
-        {/* Summary line */}
-        {info.summary && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
-            <Typography
-              sx={{
-                fontSize: 13,
-                color: theme.text.secondary,
-                lineHeight: 1.5,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                flex: 1,
-              }}
-            >
-              {info.summary}
-            </Typography>
-            {hasRawText && (
-              <Box sx={{ color: theme.text.disabled, display: 'flex', flexShrink: 0, ml: 0.5 }}>
-                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
-
-      {/* Expanded raw text */}
-      <Collapse in={expanded}>
-        <Box
+      {/* Summary — single line ellipsis */}
+      {info.summary && (
+        <Typography
           sx={{
-            p: 2.5,
-            mt: 0.5,
-            bgcolor: theme.background.secondary,
-            borderRadius: 1.5,
-            maxHeight: 400,
-            overflow: 'auto',
-            '&::-webkit-scrollbar': { width: 4 },
-            '&::-webkit-scrollbar-thumb': { bgcolor: theme.border.default, borderRadius: 2 },
+            fontSize: 12.5,
+            color: theme.text.muted,
+            lineHeight: 1.4,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            minWidth: 0,
           }}
         >
-          <FormattedText text={result.raw || ''} theme={theme} />
+          {info.summary}
+        </Typography>
+      )}
+
+      {/* Chevron arrow */}
+      {onClick && (
+        <Box sx={{ color: theme.text.disabled, display: 'flex', flexShrink: 0, ml: 0.5 }}>
+          <ChevronRight size={14} />
         </Box>
-      </Collapse>
+      )}
     </Box>
   );
 }

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import { X, FileText } from 'lucide-react';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -23,6 +24,8 @@ interface Props {
   modelUsed?: string;
   dataFreshness?: { cached: boolean; fetched_at?: string };
   toolCallsCount?: number;
+  scrollToGate?: number | null;
+  onScrollToGateConsumed?: () => void;
 }
 
 const GATE_ORDER = [
@@ -65,8 +68,25 @@ export default function ReportPanel({
   modelUsed,
   dataFreshness,
   toolCallsCount,
+  scrollToGate,
+  onScrollToGateConsumed,
 }: Props) {
   const { theme } = useTheme();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to gate section when scrollToGate changes
+  useEffect(() => {
+    if (scrollToGate == null || !open) return;
+    // Small delay to let the panel animate open
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`gate-section-${scrollToGate}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      onScrollToGateConsumed?.();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [scrollToGate, open]);
 
   const hasVerdict = verdict && verdict.action;
   const companyName = companyInfo?.name || companyInfo?.symbol || '';
@@ -87,6 +107,7 @@ export default function ReportPanel({
       }}
     >
       <Box
+        ref={scrollContainerRef}
         sx={{
           height: '100%',
           overflowY: 'auto',
@@ -157,7 +178,7 @@ export default function ReportPanel({
             const Component = GATE_COMPONENTS[skillName];
 
             return (
-              <Box key={skillName}>
+              <Box key={skillName} id={`gate-section-${gateNum}`}>
                 {/* Section divider — thick top rule */}
                 <Box sx={{ borderTop: `2px solid ${theme.border.default}`, pt: 2, mb: 2.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
