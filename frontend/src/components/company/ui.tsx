@@ -1,6 +1,6 @@
 /**
  * Shared UI primitives for Company Agent gate cards.
- * Provides a unified visual language across all report components.
+ * Refined visual language — muted tones, tight spacing, premium restraint.
  */
 import { Box, Typography, LinearProgress } from '@mui/material';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -11,7 +11,6 @@ import { useTheme } from '../../theme/ThemeProvider';
 
 interface SectionHeaderProps {
   children: React.ReactNode;
-  /** Optional right-aligned element */
   right?: React.ReactNode;
 }
 
@@ -24,16 +23,17 @@ export function SectionHeader({ children, right }: SectionHeaderProps) {
         alignItems: 'center',
         justifyContent: 'space-between',
         borderBottom: `1px solid ${theme.border.subtle}`,
-        pb: 0.75,
-        mb: 1.5,
+        pb: 0.5,
+        mb: 1.25,
       }}
     >
       <Typography
         sx={{
-          fontSize: 13,
+          fontSize: 11.5,
           fontWeight: 600,
           color: theme.text.muted,
-          letterSpacing: 0.2,
+          letterSpacing: 0.6,
+          textTransform: 'uppercase',
         }}
       >
         {children}
@@ -67,19 +67,19 @@ export function DataTable({ rows }: DataTableProps) {
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
-            px: 1.5,
-            py: 1,
-            bgcolor: i % 2 === 0 ? 'transparent' : theme.background.secondary,
+            px: 1.25,
+            py: 0.75,
+            bgcolor: i % 2 === 0 ? 'transparent' : `${theme.background.secondary}80`,
           }}
         >
-          <Typography sx={{ fontSize: 13, color: theme.text.secondary, flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: 12.5, color: theme.text.muted, flex: 1, minWidth: 0 }}>
             {row.label}
           </Typography>
           <Typography
             sx={{
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: 600,
-              color: theme.text.primary,
+              color: theme.text.secondary,
               textAlign: 'right',
               ml: 2,
               flexShrink: 0,
@@ -126,17 +126,17 @@ export function StatGrid({ items }: StatGridProps) {
           sx={{
             textAlign: 'center',
             py: 1.25,
-            px: 1,
+            px: 0.75,
             borderLeft: i > 0 ? `1px solid ${theme.border.subtle}` : 'none',
           }}
         >
           <Typography
             sx={{
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: 600,
-              color: theme.text.muted,
+              color: theme.text.disabled,
               textTransform: 'uppercase',
-              letterSpacing: 0.5,
+              letterSpacing: 0.8,
               mb: 0.25,
             }}
           >
@@ -144,9 +144,9 @@ export function StatGrid({ items }: StatGridProps) {
           </Typography>
           <Typography
             sx={{
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 700,
-              color: item.color || theme.text.primary,
+              color: item.color ? `${item.color}cc` : theme.text.primary,
               lineHeight: 1.3,
             }}
           >
@@ -167,10 +167,11 @@ interface BulletListProps {
   variant?: 'positive' | 'negative' | 'neutral';
 }
 
+// Muted, desaturated tones for a premium feel
 const BULLET_COLORS = {
-  positive: '#22c55e',
-  negative: '#ef4444',
-  neutral: '#6366f1',
+  positive: '#6dba82',
+  negative: '#d4726a',
+  neutral: '#8b8ec7',
 };
 
 export function BulletList({ items, variant = 'neutral' }: BulletListProps) {
@@ -178,7 +179,7 @@ export function BulletList({ items, variant = 'neutral' }: BulletListProps) {
   const dotColor = BULLET_COLORS[variant];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
       {items.map((item, i) => (
         <Box
           key={i}
@@ -186,25 +187,23 @@ export function BulletList({ items, variant = 'neutral' }: BulletListProps) {
             display: 'flex',
             alignItems: 'flex-start',
             gap: 1,
-            px: 1.5,
-            py: 0.75,
-            bgcolor: `${dotColor}08`,
-            borderRadius: 2,
-            border: `1px solid ${dotColor}0c`,
+            px: 1,
+            py: 0.5,
+            borderRadius: 1,
           }}
         >
           <Box
             sx={{
-              width: 6,
-              height: 6,
+              width: 5,
+              height: 5,
               borderRadius: '50%',
               bgcolor: dotColor,
-              boxShadow: `0 0 6px ${dotColor}80`,
+              opacity: 0.7,
               flexShrink: 0,
               mt: '7px',
             }}
           />
-          <Typography sx={{ fontSize: 13, color: theme.text.secondary, lineHeight: 1.7 }}>
+          <Typography sx={{ fontSize: 12.5, color: theme.text.secondary, lineHeight: 1.65 }}>
             {item}
           </Typography>
         </Box>
@@ -221,29 +220,27 @@ interface ScoreBarProps {
   label: string;
   score: number;
   max?: number;
-  /** Override color instead of auto green/orange/red */
   color?: string;
 }
+
+// Muted score colors
+const scoreColor = (score: number, max: number) => {
+  const ratio = score / max;
+  if (ratio >= 0.7) return '#6dba82';
+  if (ratio >= 0.4) return '#c4a35a';
+  return '#c47060';
+};
 
 export function ScoreBar({ label, score, max = 10, color }: ScoreBarProps) {
   const { theme } = useTheme();
   const pct = Math.min((score / max) * 100, 100);
-  const barColor = color || (score >= 7 ? '#4caf50' : score >= 4 ? '#ff9800' : '#f44336');
+  const barColor = color || scoreColor(score, max);
 
   return (
-    <Box
-      sx={{
-        mb: 1.5,
-        px: 2,
-        py: 1.25,
-        bgcolor: `${barColor}0c`,
-        borderRadius: 2.5,
-        border: `1px solid ${barColor}18`,
-      }}
-    >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
-        <Typography sx={{ fontSize: 13, color: theme.text.secondary }}>{label}</Typography>
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: barColor }}>
+    <Box sx={{ mb: 1 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+        <Typography sx={{ fontSize: 12, color: theme.text.muted }}>{label}</Typography>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: `${barColor}cc` }}>
           {score}/{max}
         </Typography>
       </Box>
@@ -251,13 +248,13 @@ export function ScoreBar({ label, score, max = 10, color }: ScoreBarProps) {
         variant="determinate"
         value={pct}
         sx={{
-          height: 6,
-          borderRadius: 3,
-          bgcolor: theme.background.secondary,
+          height: 4,
+          borderRadius: 2,
+          bgcolor: `${theme.border.subtle}`,
           '& .MuiLinearProgress-bar': {
             bgcolor: barColor,
-            borderRadius: 3,
-            boxShadow: `0 0 8px ${barColor}60`,
+            borderRadius: 2,
+            opacity: 0.75,
           },
         }}
       />
@@ -276,33 +273,34 @@ interface StatusBadgeProps {
   value: string;
 }
 
+// Muted, desaturated badge palette for refined look
 const BADGE_MAPS: Record<BadgeVariant, Record<string, { bg: string; fg: string }>> = {
   quality: {
-    excellent: { bg: '#22c55e20', fg: '#22c55e' },
-    good:      { bg: '#3b82f620', fg: '#3b82f6' },
-    mediocre:  { bg: '#f59e0b20', fg: '#f59e0b' },
-    poor:      { bg: '#ef444420', fg: '#ef4444' },
+    excellent: { bg: 'rgba(109, 186, 130, 0.12)', fg: '#6dba82' },
+    good:      { bg: 'rgba(100, 149, 237, 0.12)', fg: '#7da3d4' },
+    mediocre:  { bg: 'rgba(196, 163, 90, 0.12)',  fg: '#c4a35a' },
+    poor:      { bg: 'rgba(196, 112, 96, 0.12)',  fg: '#c47060' },
   },
   action: {
-    buy:   { bg: '#22c55e20', fg: '#22c55e' },
-    watch: { bg: '#f59e0b20', fg: '#f59e0b' },
-    avoid: { bg: '#ef444420', fg: '#ef4444' },
+    buy:   { bg: 'rgba(109, 186, 130, 0.12)', fg: '#6dba82' },
+    watch: { bg: 'rgba(196, 163, 90, 0.12)',  fg: '#c4a35a' },
+    avoid: { bg: 'rgba(196, 112, 96, 0.12)',  fg: '#c47060' },
   },
   width: {
-    wide:   { bg: '#22c55e20', fg: '#22c55e' },
-    narrow: { bg: '#f59e0b20', fg: '#f59e0b' },
-    none:   { bg: '#ef444420', fg: '#ef4444' },
+    wide:   { bg: 'rgba(109, 186, 130, 0.12)', fg: '#6dba82' },
+    narrow: { bg: 'rgba(196, 163, 90, 0.12)',  fg: '#c4a35a' },
+    none:   { bg: 'rgba(196, 112, 96, 0.12)',  fg: '#c47060' },
   },
   assessment: {
-    cheap:     { bg: '#22c55e20', fg: '#22c55e' },
-    fair:      { bg: '#3b82f620', fg: '#3b82f6' },
-    expensive: { bg: '#f59e0b20', fg: '#f59e0b' },
-    bubble:    { bg: '#9c27b020', fg: '#9c27b0' },
+    cheap:     { bg: 'rgba(109, 186, 130, 0.12)', fg: '#6dba82' },
+    fair:      { bg: 'rgba(100, 149, 237, 0.12)', fg: '#7da3d4' },
+    expensive: { bg: 'rgba(196, 163, 90, 0.12)',  fg: '#c4a35a' },
+    bubble:    { bg: 'rgba(156, 112, 176, 0.12)',  fg: '#9c70b0' },
   },
   risk: {
-    low:    { bg: '#22c55e20', fg: '#22c55e' },
-    medium: { bg: '#f59e0b20', fg: '#f59e0b' },
-    high:   { bg: '#ef444420', fg: '#ef4444' },
+    low:    { bg: 'rgba(109, 186, 130, 0.12)', fg: '#6dba82' },
+    medium: { bg: 'rgba(196, 163, 90, 0.12)',  fg: '#c4a35a' },
+    high:   { bg: 'rgba(196, 112, 96, 0.12)',  fg: '#c47060' },
   },
   score: {},
 };
@@ -311,20 +309,20 @@ export function StatusBadge({ variant, value }: StatusBadgeProps) {
   const { theme } = useTheme();
   const key = (value || '').toLowerCase();
   const map = BADGE_MAPS[variant] || {};
-  const colors = map[key] || { bg: `${theme.brand.primary}15`, fg: theme.brand.primary };
+  const colors = map[key] || { bg: `${theme.brand.primary}10`, fg: `${theme.brand.primary}bb` };
 
   return (
     <Box
       component="span"
       sx={{
         display: 'inline-flex',
-        px: 1.5,
-        py: 0.5,
-        borderRadius: 1,
-        fontSize: 12,
+        px: 1.25,
+        py: 0.375,
+        borderRadius: 0.75,
+        fontSize: 11,
         fontWeight: 700,
         lineHeight: 1,
-        letterSpacing: 0.5,
+        letterSpacing: 0.8,
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
         bgcolor: colors.bg,
@@ -337,7 +335,7 @@ export function StatusBadge({ variant, value }: StatusBadgeProps) {
 }
 
 // ═══════════════════════════════════════════════════
-// 7. AccentCard — colored accent card with glow
+// 7. AccentCard — colored accent card (subtle)
 // ═══════════════════════════════════════════════════
 
 interface AccentCardProps {
@@ -350,12 +348,11 @@ export function AccentCard({ color, children, sx }: AccentCardProps) {
   return (
     <Box
       sx={{
-        px: 2,
-        py: 1.5,
-        bgcolor: `${color}14`,
-        borderRadius: 3,
-        border: `1px solid ${color}30`,
-        boxShadow: `0 2px 12px ${color}12, inset 0 1px 0 ${color}18`,
+        px: 1.5,
+        py: 1,
+        bgcolor: `${color}08`,
+        borderRadius: 1.5,
+        borderLeft: `2px solid ${color}40`,
         ...sx,
       }}
     >

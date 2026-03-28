@@ -603,7 +603,12 @@ export default function CompanyAgentPage() {
                             onClick={() => { setViewingRunId(null); setSelectedId(a.id); }}
                             sx={{
                               cursor: 'pointer',
+                              transition: 'all 0.15s ease',
                               '& .MuiTableCell-root': { borderColor: theme.border.subtle, py: 1.25 },
+                              '&:hover': {
+                                bgcolor: `${theme.brand.primary}08`,
+                                '& .MuiTableCell-root': { borderColor: theme.border.subtle, py: 1.25 },
+                              },
                               '&:hover .row-delete': { opacity: 1 },
                             }}
                           >

@@ -60,7 +60,7 @@ export default function RiskMatrix({ scenarios }: Props) {
           const x = padding + s.probability * plotSize;
           const y = gridSize - padding - (s.impact / 10) * plotSize;
           const severity = s.probability * s.impact;
-          const color = severity >= 3 ? '#f44336' : severity >= 1 ? '#ff9800' : '#4caf50';
+          const color = severity >= 3 ? '#c47060' : severity >= 1 ? '#c4a35a' : '#6dba82';
 
           return (
             <g key={i}>

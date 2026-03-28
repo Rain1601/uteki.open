@@ -6,9 +6,9 @@ interface Props {
 }
 
 const PHILOSOPHER_CONFIG: Record<string, { label: string; color: string }> = {
-  buffett: { label: 'Buffett', color: '#4caf50' },
-  fisher:  { label: 'Fisher',  color: '#2196f3' },
-  munger:  { label: 'Munger',  color: '#ff9800' },
+  buffett: { label: 'Buffett', color: '#6dba82' },
+  fisher:  { label: 'Fisher',  color: '#7da3d4' },
+  munger:  { label: 'Munger',  color: '#c4a35a' },
 };
 
 export default function PhilosophyScoresBar({ scores }: Props) {
@@ -36,7 +36,7 @@ export default function PhilosophyScoresBar({ scores }: Props) {
             </Box>
             <Box
               sx={{
-                height: 8,
+                height: 5,
                 bgcolor: theme.background.secondary,
                 borderRadius: 4,
                 overflow: 'hidden',

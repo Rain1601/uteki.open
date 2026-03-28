@@ -8,17 +8,18 @@ interface Props {
   companyName: string;
 }
 
+// Muted, desaturated action colors — premium feel
 const ACTION_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  BUY:   { label: 'BUY',   color: '#4caf50', bg: 'rgba(76, 175, 80, 0.12)' },
-  WATCH: { label: 'WATCH', color: '#ff9800', bg: 'rgba(255, 152, 0, 0.12)' },
-  AVOID: { label: 'AVOID', color: '#f44336', bg: 'rgba(244, 67, 54, 0.12)' },
+  BUY:   { label: 'BUY',   color: '#6dba82', bg: 'rgba(109, 186, 130, 0.06)' },
+  WATCH: { label: 'WATCH', color: '#c4a35a', bg: 'rgba(196, 163, 90, 0.06)' },
+  AVOID: { label: 'AVOID', color: '#c47060', bg: 'rgba(196, 112, 96, 0.06)' },
 };
 
 const QUALITY_COLORS: Record<string, string> = {
-  EXCELLENT: '#4caf50',
-  GOOD: '#ff9800',
-  MEDIOCRE: '#f57c00',
-  POOR: '#f44336',
+  EXCELLENT: '#6dba82',
+  GOOD: '#c4a35a',
+  MEDIOCRE: '#b8956a',
+  POOR: '#c47060',
 };
 
 export default function VerdictBanner({ verdict, companyName }: Props) {
@@ -39,39 +40,39 @@ export default function VerdictBanner({ verdict, companyName }: Props) {
     <Box
       sx={{
         bgcolor: config.bg,
-        border: `1px solid ${config.color}30`,
+        border: `1px solid ${config.color}18`,
         borderRadius: 2,
-        p: 3,
+        p: 2.5,
         display: 'flex',
         flexDirection: 'column',
-        gap: 2.5,
+        gap: 2,
       }}
     >
       {/* Row 1: Action badge + company name */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <Box
           sx={{
-            px: 2.5,
-            py: 1,
-            borderRadius: 1.5,
-            bgcolor: config.color,
-            color: '#fff',
+            px: 2,
+            py: 0.75,
+            borderRadius: 1,
+            bgcolor: `${config.color}18`,
+            color: config.color,
             fontWeight: 800,
-            fontSize: 22,
+            fontSize: 18,
             letterSpacing: 2,
             lineHeight: 1,
           }}
         >
           {config.label}
         </Box>
-        <Typography sx={{ fontSize: 16, fontWeight: 600, color: theme.text.primary }}>
+        <Typography sx={{ fontSize: 15, fontWeight: 600, color: theme.text.primary }}>
           {companyName}
         </Typography>
       </Box>
 
       {/* Row 2: One sentence description */}
       {verdict.one_sentence && (
-        <Typography sx={{ fontSize: 14, fontWeight: 500, color: theme.text.secondary, lineHeight: 1.6 }}>
+        <Typography sx={{ fontSize: 13, color: theme.text.secondary, lineHeight: 1.6 }}>
           {verdict.one_sentence}
         </Typography>
       )}

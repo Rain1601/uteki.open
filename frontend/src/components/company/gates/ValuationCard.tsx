@@ -7,17 +7,17 @@ interface Props {
 }
 
 const MARGIN_CONFIG: Record<string, { color: string; pct: number }> = {
-  large:    { color: '#4caf50', pct: 85 },
-  moderate: { color: '#ff9800', pct: 55 },
-  thin:     { color: '#f44336', pct: 25 },
-  negative: { color: '#9c27b0', pct: 5 },
+  large:    { color: '#6dba82', pct: 85 },
+  moderate: { color: '#c4a35a', pct: 55 },
+  thin:     { color: '#c47060', pct: 25 },
+  negative: { color: '#9c70b0', pct: 5 },
 };
 
 const SENTIMENT_COLORS: Record<string, string> = {
-  fear:     '#4caf50',
-  neutral:  '#ff9800',
-  greed:    '#f44336',
-  euphoria: '#9c27b0',
+  fear:     '#6dba82',
+  neutral:  '#c4a35a',
+  greed:    '#c47060',
+  euphoria: '#9c70b0',
 };
 
 export default function ValuationCard({ data }: Props) {
@@ -27,7 +27,7 @@ export default function ValuationCard({ data }: Props) {
   const sentimentColor = SENTIMENT_COLORS[data.market_sentiment] || theme.text.muted;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Top stats: assessment + confidence + sentiment */}
       <StatGrid
         items={[
@@ -47,8 +47,8 @@ export default function ValuationCard({ data }: Props) {
       {/* Safety margin */}
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography sx={{ fontSize: 13, color: theme.text.secondary }}>Safety Margin</Typography>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: marginCfg.color }}>
+          <Typography sx={{ fontSize: 12.5, color: theme.text.secondary }}>Safety Margin</Typography>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: marginCfg.color }}>
             {data.safety_margin?.toUpperCase()}
           </Typography>
         </Box>
@@ -63,7 +63,7 @@ export default function ValuationCard({ data }: Props) {
           }}
         />
         {data.safety_margin_detail && (
-          <Typography sx={{ fontSize: 12, color: theme.text.muted, mt: 0.5 }}>
+          <Typography sx={{ fontSize: 11, color: theme.text.muted, mt: 0.5, lineHeight: 1.65 }}>
             {data.safety_margin_detail}
           </Typography>
         )}
@@ -73,7 +73,7 @@ export default function ValuationCard({ data }: Props) {
       {data.price_reasoning && (
         <Box>
           <SectionHeader>Price Reasoning</SectionHeader>
-          <Typography sx={{ fontSize: 13, color: theme.text.secondary, lineHeight: 1.7 }}>
+          <Typography sx={{ fontSize: 12.5, color: theme.text.secondary, lineHeight: 1.65 }}>
             {data.price_reasoning}
           </Typography>
         </Box>
@@ -94,7 +94,7 @@ export default function ValuationCard({ data }: Props) {
 
       {/* Sentiment detail */}
       {data.sentiment_detail && (
-        <Typography sx={{ fontSize: 13, color: theme.text.muted, fontStyle: 'italic' }}>
+        <Typography sx={{ fontSize: 12.5, color: theme.text.muted, fontStyle: 'italic', lineHeight: 1.65 }}>
           {data.sentiment_detail}
         </Typography>
       )}

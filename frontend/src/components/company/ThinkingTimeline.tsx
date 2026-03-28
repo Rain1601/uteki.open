@@ -30,8 +30,8 @@ const timelineKeyframes = `
   100% { background-position: 200% 0; }
 }
 @keyframes tl-glow {
-  0%, 100% { box-shadow: 0 0 4px rgba(100,149,237,0.3); }
-  50% { box-shadow: 0 0 12px rgba(100,149,237,0.6); }
+  0%, 100% { box-shadow: 0 0 6px rgba(100,149,237,0.4), 0 0 12px rgba(100,149,237,0.2); }
+  50% { box-shadow: 0 0 12px rgba(100,149,237,0.7), 0 0 24px rgba(100,149,237,0.3); }
 }
 @keyframes tl-card-in {
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
@@ -44,11 +44,15 @@ const timelineKeyframes = `
 }
 @keyframes tl-report-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
 }
 @keyframes tl-line-sweep {
   0% { background-position: -100% 0; }
   100% { background-position: 200% 0; }
+}
+@keyframes tl-running-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(100,149,237,0.5), 0 0 16px rgba(100,149,237,0.2); }
+  50% { box-shadow: 0 0 16px rgba(100,149,237,0.8), 0 0 32px rgba(100,149,237,0.3); }
 }
 `;
 
@@ -129,7 +133,9 @@ export default function ThinkingTimeline({
             position: 'sticky',
             top: 0,
             zIndex: 10,
-            bgcolor: theme.background.primary,
+            bgcolor: theme.mode === 'dark' ? 'rgba(24, 28, 31, 0.9)' : 'rgba(245, 247, 249, 0.9)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             pt: 1,
             pb: 1.5,
             mb: 1.5,
@@ -145,15 +151,15 @@ export default function ThinkingTimeline({
               const isDone = status === 'complete';
               const hasErr = status === 'error' || status === 'timeout';
 
-              const dotColor = isDone ? '#22c55e' : isActive ? theme.brand.primary : hasErr ? '#ef4444' : theme.text.disabled;
+              const dotColor = isDone ? '#6dba82' : isActive ? theme.brand.primary : hasErr ? '#c47060' : theme.text.disabled;
 
               return (
                 <Box key={gate} sx={{ display: 'flex', alignItems: 'center', flex: isLast ? 0 : 1 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.3, minWidth: 48 }}>
                     <Box
                       sx={{
-                        width: 20,
-                        height: 20,
+                        width: 22,
+                        height: 22,
                         borderRadius: '50%',
                         display: 'flex',
                         alignItems: 'center',
@@ -161,11 +167,12 @@ export default function ThinkingTimeline({
                         transition: 'all 0.3s ease',
                         ...(isDone && {
                           bgcolor: dotColor,
+                          boxShadow: 'none',
                           animation: isComplete ? `tl-check-pop 0.4s ease-out ${i * 0.08}s both` : 'none',
                         }),
                         ...(isActive && {
                           bgcolor: dotColor,
-                          animation: 'tl-glow 1.5s ease-in-out infinite',
+                          animation: 'tl-running-glow 1.5s ease-in-out infinite',
                         }),
                         ...(hasErr && {
                           bgcolor: dotColor,
@@ -176,12 +183,12 @@ export default function ThinkingTimeline({
                         }),
                       }}
                     >
-                      {isDone && <Check size={10} color="#fff" strokeWidth={3} />}
+                      {isDone && <Check size={11} color="#fff" strokeWidth={3} />}
                       {isActive && (
                         <Box
                           sx={{
-                            width: 6,
-                            height: 6,
+                            width: 7,
+                            height: 7,
                             border: '1.5px solid #fff',
                             borderTop: '1.5px solid transparent',
                             borderRadius: '50%',
@@ -196,7 +203,7 @@ export default function ThinkingTimeline({
                     <Typography
                       sx={{
                         fontSize: 9,
-                        color: isActive ? theme.brand.primary : isDone ? '#22c55e' : theme.text.disabled,
+                        color: isActive ? theme.brand.primary : isDone ? '#6dba82' : theme.text.disabled,
                         fontWeight: isActive ? 600 : 400,
                         textAlign: 'center',
                         lineHeight: 1.2,
@@ -212,19 +219,20 @@ export default function ThinkingTimeline({
                     <Box
                       sx={{
                         flex: 1,
-                        height: 1.5,
+                        height: 2,
                         mx: 0.3,
                         mt: -1.5,
+                        borderRadius: 1,
                         transition: 'background-color 0.3s ease',
                         ...(isActive ? {
-                          background: `linear-gradient(90deg, ${theme.brand.primary}, ${theme.brand.primary}40, ${theme.border.subtle})`,
+                          background: `linear-gradient(90deg, ${theme.brand.primary}, ${theme.brand.accent || theme.brand.primary}60, ${theme.border.subtle})`,
                           backgroundSize: '200% 100%',
-                          animation: 'tl-line-sweep 2s ease-in-out infinite',
+                          animation: 'tl-line-sweep 2.5s ease-in-out infinite',
                         } : {
                           bgcolor:
                             (gateStatuses[gate + 1] && gateStatuses[gate + 1] !== 'pending')
-                              ? '#22c55e'
-                              : isDone ? '#22c55e' : theme.border.subtle,
+                              ? '#6dba82'
+                              : isDone ? '#6dba82' : theme.border.subtle,
                         }),
                       }}
                     />
@@ -272,6 +280,7 @@ export default function ThinkingTimeline({
           status="complete"
           label="数据加载完成"
           sublabel={`${companyInfo.name} · ${companyInfo.symbol}`}
+          successGlow
         />
       )}
 
@@ -386,7 +395,7 @@ export default function ThinkingTimeline({
             {/* Error display */}
             {hasError && result?.error && (
               <Box sx={{ ml: '32px', pl: 2, mt: 0.5, mb: 1 }}>
-                <Typography sx={{ fontSize: 12, color: '#ef4444' }}>
+                <Typography sx={{ fontSize: 12, color: '#c47060' }}>
                   {result.error}
                 </Typography>
               </Box>
@@ -424,7 +433,7 @@ export default function ThinkingTimeline({
             sublabel={`总耗时 ${formatTime(elapsedMs)}`}
           />
 
-          {/* View report button */}
+          {/* View report button — gradient with glow */}
           <Box sx={{ ml: '32px', pl: 2, mt: 1.5 }}>
             <Box
               onClick={onOpenReport}
@@ -434,18 +443,15 @@ export default function ThinkingTimeline({
                 gap: 1,
                 px: 2.5,
                 py: 1.2,
-                bgcolor: theme.brand.primary,
+                background: `linear-gradient(135deg, ${theme.brand.primary}, ${theme.brand.accent || theme.brand.primary})`,
                 color: '#fff',
                 borderRadius: 2,
                 cursor: 'pointer',
                 fontSize: 14,
                 fontWeight: 600,
                 transition: 'all 0.2s',
-                animation: 'tl-report-pulse 2s ease-in-out 0.5s 3',
                 '&:hover': {
-                  filter: 'brightness(1.15)',
-                  transform: 'translateY(-1px)',
-                  boxShadow: `0 4px 12px ${theme.brand.primary}40`,
+                  filter: 'brightness(1.1)',
                 },
               }}
             >
@@ -469,16 +475,17 @@ interface NodeProps {
   label: string;
   sublabel?: string;
   latencyMs?: number;
+  successGlow?: boolean;
 }
 
-function TimelineNode({ theme, status, label, sublabel, latencyMs }: NodeProps) {
+function TimelineNode({ theme, status, label, sublabel, latencyMs, successGlow }: NodeProps) {
   const dotSize = 12;
   const outerSize = 32;
 
   const dotColor =
-    status === 'complete' || status === 'done' ? '#22c55e' :
+    status === 'complete' || status === 'done' ? '#6dba82' :
     status === 'running' ? theme.brand.primary :
-    status === 'error' ? '#ef4444' :
+    status === 'error' ? '#c47060' :
     theme.text.disabled;
 
   return (
@@ -491,6 +498,13 @@ function TimelineNode({ theme, status, label, sublabel, latencyMs }: NodeProps) 
         pl: 0,
         position: 'relative',
         zIndex: 1,
+        // Subtle success glow background for data loaded node
+        ...(successGlow ? {
+          mx: -1,
+          px: 1,
+          borderRadius: 1.5,
+          bgcolor: 'rgba(109, 186, 130, 0.04)',
+        } : {}),
       }}
     >
       {/* Dot */}
@@ -511,11 +525,10 @@ function TimelineNode({ theme, status, label, sublabel, latencyMs }: NodeProps) 
               height: 20,
               borderRadius: '50%',
               bgcolor: dotColor,
-              animation: 'tl-pulse 1.5s infinite',
+              animation: 'tl-running-glow 1.5s ease-in-out infinite',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: `0 0 8px ${dotColor}60`,
             }}
           >
             <Box
@@ -539,6 +552,7 @@ function TimelineNode({ theme, status, label, sublabel, latencyMs }: NodeProps) 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              boxShadow: `0 0 8px ${dotColor}40`,
             }}
           >
             <Check size={10} color="#fff" strokeWidth={3} />
@@ -605,7 +619,7 @@ function TimelineNode({ theme, status, label, sublabel, latencyMs }: NodeProps) 
           <Typography
             sx={{
               fontSize: 12,
-              color: status === 'error' ? '#ef4444' : theme.text.muted,
+              color: status === 'error' ? '#c47060' : theme.text.muted,
               mt: 0.2,
               lineHeight: 1.4,
             }}

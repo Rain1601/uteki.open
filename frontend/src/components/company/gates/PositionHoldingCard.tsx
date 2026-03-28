@@ -7,10 +7,18 @@ interface Props {
   data: Record<string, any>;
 }
 
+// Muted action colors
 const ACTION_COLORS: Record<string, string> = {
-  BUY: '#4caf50',
-  WATCH: '#ff9800',
-  AVOID: '#f44336',
+  BUY: '#6dba82',
+  WATCH: '#c4a35a',
+  AVOID: '#c47060',
+};
+
+// Muted philosopher colors
+const PHILOSOPHER_COLORS: Record<string, string> = {
+  Buffett: '#6dba82',
+  Fisher: '#7da3d4',
+  Munger: '#c4a35a',
 };
 
 export default function PositionHoldingCard({ data }: Props) {
@@ -27,44 +35,41 @@ export default function PositionHoldingCard({ data }: Props) {
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      {/* Top stats */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <StatGrid items={statItems} />
 
-      {/* Position reasoning */}
       {data.position_reasoning && (
-        <Typography sx={{ fontSize: 13, color: theme.text.secondary, lineHeight: 1.7 }}>
+        <Typography sx={{ fontSize: 12.5, color: theme.text.secondary, lineHeight: 1.65 }}>
           {data.position_reasoning}
         </Typography>
       )}
 
-      {/* Philosophy scores chart */}
       {data.philosophy_scores && (
-        <Box sx={{ maxWidth: 400 }}>
+        <Box sx={{ maxWidth: 380 }}>
           <PhilosophyScoresBar scores={data.philosophy_scores} />
         </Box>
       )}
 
       {/* Philosopher comments */}
       {[
-        { name: 'Buffett', comment: data.buffett_comment, color: '#4caf50' },
-        { name: 'Fisher', comment: data.fisher_comment, color: '#2196f3' },
-        { name: 'Munger', comment: data.munger_comment, color: '#ff9800' },
+        { name: 'Buffett', comment: data.buffett_comment, color: PHILOSOPHER_COLORS.Buffett },
+        { name: 'Fisher', comment: data.fisher_comment, color: PHILOSOPHER_COLORS.Fisher },
+        { name: 'Munger', comment: data.munger_comment, color: PHILOSOPHER_COLORS.Munger },
       ].filter((p) => p.comment).length > 0 && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
           {[
-            { name: 'Buffett', comment: data.buffett_comment, color: '#4caf50' },
-            { name: 'Fisher', comment: data.fisher_comment, color: '#2196f3' },
-            { name: 'Munger', comment: data.munger_comment, color: '#ff9800' },
+            { name: 'Buffett', comment: data.buffett_comment, color: PHILOSOPHER_COLORS.Buffett },
+            { name: 'Fisher', comment: data.fisher_comment, color: PHILOSOPHER_COLORS.Fisher },
+            { name: 'Munger', comment: data.munger_comment, color: PHILOSOPHER_COLORS.Munger },
           ]
             .filter((p) => p.comment)
             .map((p) => (
               <AccentCard key={p.name} color={p.color}>
-                <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: p.color, minWidth: 50 }}>
+                <Box sx={{ display: 'flex', gap: 1.25 }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: `${p.color}bb`, minWidth: 46 }}>
                     {p.name}
                   </Typography>
-                  <Typography sx={{ fontSize: 13, color: theme.text.secondary, fontStyle: 'italic' }}>
+                  <Typography sx={{ fontSize: 12.5, color: theme.text.secondary, fontStyle: 'italic', lineHeight: 1.6 }}>
                     "{p.comment}"
                   </Typography>
                 </Box>
@@ -73,7 +78,6 @@ export default function PositionHoldingCard({ data }: Props) {
         </Box>
       )}
 
-      {/* Sell triggers */}
       {data.sell_triggers?.length > 0 && (
         <Box>
           <SectionHeader>Sell Triggers</SectionHeader>
@@ -81,7 +85,6 @@ export default function PositionHoldingCard({ data }: Props) {
         </Box>
       )}
 
-      {/* Add triggers */}
       {data.add_triggers?.length > 0 && (
         <Box>
           <SectionHeader>Add Position Triggers</SectionHeader>
@@ -89,10 +92,9 @@ export default function PositionHoldingCard({ data }: Props) {
         </Box>
       )}
 
-      {/* One sentence */}
       {data.one_sentence && (
-        <Box sx={{ p: 2, bgcolor: `${actionColor}08`, borderRadius: 1.5, border: `1px solid ${actionColor}20` }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.text.primary, textAlign: 'center' }}>
+        <Box sx={{ p: 1.5, bgcolor: `${actionColor}08`, borderRadius: 1, border: `1px solid ${actionColor}12` }}>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: theme.text.secondary, textAlign: 'center' }}>
             {data.one_sentence}
           </Typography>
         </Box>

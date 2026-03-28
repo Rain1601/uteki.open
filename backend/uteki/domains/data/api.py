@@ -301,6 +301,21 @@ async def trigger_ingestion(
     return {"status": "triggered", "message": "Ingestion started in background"}
 
 
+@router.post("/ingestion/enrich-tushare")
+async def enrich_tushare(
+    background_tasks: BackgroundTasks,
+    x_cron_secret: Optional[str] = Header(None),
+):
+    """Enrich existing klines with PE/PB/market-cap from Tushare.
+
+    Updates only rows where pe IS NULL. Runs in background.
+    Requires X-Cron-Secret header.
+    """
+    _verify_cron_secret(x_cron_secret)
+    background_tasks.add_task(_run_tushare_enrich_background)
+    return {"status": "triggered", "message": "Tushare enrichment started in background"}
+
+
 @router.get("/ingestion/status", response_model=IngestionStatusResponse)
 async def get_ingestion_status(
     limit: int = Query(20, ge=1, le=100),
@@ -415,6 +430,19 @@ async def _run_ingestion_background(
         logger.error(f"Background ingestion failed: {e}")
 
 
+async def _run_tushare_enrich_background():
+    """Background: enrich klines with Tushare PE/PB/市值."""
+    try:
+        svc = get_ingestion_service()
+        result = await svc.enrich_tushare()
+        logger.info(
+            f"Tushare enrichment completed: {result.get('rows_enriched', 0)} rows "
+            f"across {result.get('total_symbols', 0)} symbols"
+        )
+    except Exception as e:
+        logger.error(f"Tushare enrichment failed: {e}")
+
+
 # ============================================================================
 # Seed default symbols
 # ============================================================================
@@ -478,6 +506,52 @@ async def seed_default_symbols(
 
     return {
         "status": "ok",
+        "added": len(added),
+        "skipped": len(skipped),
+        "symbols": added,
+    }
+
+
+@router.post("/symbols/seed-index")
+async def seed_index_constituents(
+    x_cron_secret: Optional[str] = Header(None),
+):
+    """Seed S&P 500 + NASDAQ 100 constituent symbols (~600 stocks).
+
+    Fetches current constituents from Wikipedia, falls back to a static list.
+    Requires X-Cron-Secret header.
+    """
+    _verify_cron_secret(x_cron_secret)
+
+    from uteki.domains.data.seed_sp500_nasdaq100 import get_index_constituents
+
+    constituents = get_index_constituents()
+    svc = get_kline_service()
+    added = []
+    skipped = []
+
+    for s in constituents:
+        try:
+            sym = await svc.add_symbol(
+                symbol=s["symbol"],
+                asset_type=s["asset_type"],
+                name=s.get("name"),
+                exchange=s.get("exchange"),
+                currency=s.get("currency", "USD"),
+                timezone=s.get("timezone", "America/New_York"),
+                data_source=s.get("data_source"),
+            )
+            if sym.get("symbol") == s["symbol"].upper():
+                added.append(s["symbol"])
+            else:
+                skipped.append(s["symbol"])
+        except Exception as e:
+            logger.warning(f"Failed to seed {s['symbol']}: {e}")
+            skipped.append(s["symbol"])
+
+    return {
+        "status": "ok",
+        "total_constituents": len(constituents),
         "added": len(added),
         "skipped": len(skipped),
         "symbols": added,

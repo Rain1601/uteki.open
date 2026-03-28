@@ -98,6 +98,11 @@ class KlineDaily(Base):
     volume: Mapped[Optional[float]] = mapped_column(Numeric(24, 4), nullable=True)
     adj_close: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     turnover: Mapped[Optional[float]] = mapped_column(Numeric(24, 4), nullable=True)
+    pe: Mapped[Optional[float]] = mapped_column(Numeric(12, 4), nullable=True)
+    pb: Mapped[Optional[float]] = mapped_column(Numeric(12, 4), nullable=True)
+    total_mv: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    float_mv: Mapped[Optional[float]] = mapped_column(Numeric(20, 2), nullable=True)
+    vwap: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     quality: Mapped[int] = mapped_column(SmallInteger, server_default="0")
 
@@ -113,6 +118,11 @@ class KlineDaily(Base):
             "volume": float(self.volume) if self.volume is not None else None,
             "adj_close": float(self.adj_close) if self.adj_close is not None else None,
             "turnover": float(self.turnover) if self.turnover is not None else None,
+            "pe": float(self.pe) if self.pe is not None else None,
+            "pb": float(self.pb) if self.pb is not None else None,
+            "total_mv": float(self.total_mv) if self.total_mv is not None else None,
+            "float_mv": float(self.float_mv) if self.float_mv is not None else None,
+            "vwap": float(self.vwap) if self.vwap is not None else None,
             "source": self.source,
             "quality": self.quality,
         }

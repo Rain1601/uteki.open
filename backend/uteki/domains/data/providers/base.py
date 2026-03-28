@@ -22,12 +22,13 @@ class DataProvider(str, Enum):
     BINANCE = "binance"
     AKSHARE = "akshare"
     FMP = "fmp"
+    TUSHARE = "tushare"
 
 
 # Default provider routing per asset type
 PROVIDER_ROUTING: dict[AssetType, DataProvider] = {
-    AssetType.US_STOCK: DataProvider.FMP,
-    AssetType.US_ETF: DataProvider.FMP,
+    AssetType.US_STOCK: DataProvider.YFINANCE,
+    AssetType.US_ETF: DataProvider.YFINANCE,
     AssetType.CRYPTO: DataProvider.YFINANCE,   # BTC-USD format; FMP uses different symbol format
     AssetType.FOREX: DataProvider.YFINANCE,    # EURUSD=X format; FMP uses different symbol format
     AssetType.HK_STOCK: DataProvider.YFINANCE, # FMP HK coverage uncertain
@@ -47,6 +48,12 @@ class KlineRow:
     volume: float
     adj_close: Optional[float] = None
     turnover: Optional[float] = None
+    # Extended fields (populated by Tushare or other enrichment sources)
+    pe: Optional[float] = None
+    pb: Optional[float] = None
+    total_mv: Optional[float] = None   # 总市值（万元）
+    float_mv: Optional[float] = None   # 流通市值（万元）
+    vwap: Optional[float] = None       # 量加权均价
 
 
 class BaseDataProvider(ABC):
@@ -113,6 +120,9 @@ class DataProviderFactory:
         elif provider == DataProvider.FMP:
             from .fmp_provider import FMPProvider
             return FMPProvider()
+        elif provider == DataProvider.TUSHARE:
+            from .tushare_provider import TushareProvider
+            return TushareProvider()
         else:
             raise ValueError(f"Unsupported data provider: {provider}")
 

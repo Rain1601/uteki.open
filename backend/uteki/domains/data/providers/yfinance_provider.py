@@ -2,12 +2,16 @@
 
 import asyncio
 import logging
+import time
 from datetime import date, timedelta
 from typing import List, Optional
 
 from .base import BaseDataProvider, DataProvider, KlineRow
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds; exponential: 1s → 2s → 4s
 
 
 class YFinanceProvider(BaseDataProvider):
@@ -22,16 +26,35 @@ class YFinanceProvider(BaseDataProvider):
         end: Optional[date] = None,
     ) -> List[KlineRow]:
         if start is None:
-            start = date.today() - timedelta(days=5 * 365)
+            start = date.today() - timedelta(days=20 * 365)
         if end is None:
             end = date.today()
 
-        # yfinance is synchronous — run in executor
+        # yfinance is synchronous — run in executor with retries
         loop = asyncio.get_event_loop()
-        rows = await loop.run_in_executor(
-            None, self._fetch_sync, symbol, start, end,
-        )
-        return rows
+
+        last_error: Optional[Exception] = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                rows = await loop.run_in_executor(
+                    None, self._fetch_sync, symbol, start, end,
+                )
+                return rows
+            except Exception as e:
+                last_error = e
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"yfinance attempt {attempt}/{MAX_RETRIES} failed for {symbol}: {e}. "
+                        f"Retrying in {delay:.1f}s…"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        f"yfinance all {MAX_RETRIES} attempts failed for {symbol}: {e}"
+                    )
+
+        raise last_error  # type: ignore[misc]
 
     def _fetch_sync(
         self, symbol: str, start: date, end: date,

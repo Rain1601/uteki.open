@@ -46,6 +46,10 @@ export const SIDEBAR_TRANSITION_DURATION = '360ms';
 export const SIDEBAR_TRANSITION_EASING = 'cubic-bezier(0.25, 0.1, 0.25, 1.0)';
 const TRANSITION = `width ${SIDEBAR_TRANSITION_DURATION} ${SIDEBAR_TRANSITION_EASING}`;
 
+// Fixed icon column: ensures icons stay at the same position in both modes
+const NAV_MX = 6;  // px — consistent button margin
+const ICON_COL_W = SIDEBAR_COLLAPSED_WIDTH - NAV_MX * 2;  // 42px
+
 interface MenuItem {
   text: string;
   icon: JSX.Element;
@@ -398,11 +402,11 @@ export default function HoverSidebar() {
           display: 'flex',
           alignItems: 'center',
           minHeight: 56,
-          px: expanded ? 2 : 0,
-          justifyContent: expanded ? 'flex-start' : 'center',
+          pl: `${(SIDEBAR_COLLAPSED_WIDTH - 28) / 2}px`,  // 13px — centres avatar in collapsed width
           gap: 1,
           borderBottom: `1px solid ${theme.border.divider}`,
           flexShrink: 0,
+          overflow: 'hidden',
         }}
       >
         <Tooltip title={!expanded ? (user?.name || '设置') : ''} placement="right" arrow>
@@ -423,31 +427,35 @@ export default function HoverSidebar() {
             {user?.name?.[0] || <User size={14} />}
           </Avatar>
         </Tooltip>
-        {expanded && (
-          <Box sx={{ overflow: 'hidden', flex: 1 }}>
-            <Typography
-              noWrap
-              sx={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: theme.text.primary,
-                lineHeight: 1.3,
-              }}
-            >
-              {user?.name || '用户'}
-            </Typography>
-            <Typography
-              noWrap
-              sx={{
-                fontSize: 11,
-                color: theme.text.muted,
-                lineHeight: 1.3,
-              }}
-            >
-              {user?.email || ''}
-            </Typography>
-          </Box>
-        )}
+        <Box sx={{
+          overflow: 'hidden',
+          flex: 1,
+          opacity: expanded ? 1 : 0,
+          transition: `opacity 250ms ${SIDEBAR_TRANSITION_EASING}`,
+          transitionDelay: expanded ? '100ms' : '0ms',
+        }}>
+          <Typography
+            noWrap
+            sx={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: theme.text.primary,
+              lineHeight: 1.3,
+            }}
+          >
+            {user?.name || '用户'}
+          </Typography>
+          <Typography
+            noWrap
+            sx={{
+              fontSize: 11,
+              color: theme.text.muted,
+              lineHeight: 1.3,
+            }}
+          >
+            {user?.email || ''}
+          </Typography>
+        </Box>
       </Box>
 
       {/* Spacer between avatar and nav */}
@@ -468,24 +476,32 @@ export default function HoverSidebar() {
         {menuItems.map((category, index) => (
           <Box key={category.category}>
             {index > 0 && (
-              <Divider sx={{ mx: expanded ? 2 : 1, my: 1, borderColor: theme.border.divider }} />
+              <Divider sx={{
+                mx: `${NAV_MX}px`,
+                my: expanded ? 0.5 : 1,
+                borderColor: theme.border.divider,
+                transition: `margin ${SIDEBAR_TRANSITION_DURATION} ${SIDEBAR_TRANSITION_EASING}`,
+              }} />
             )}
-            {expanded && (
-              <Typography
-                noWrap
-                sx={{
-                  px: 2,
-                  py: 0.75,
-                  color: theme.text.disabled,
-                  fontSize: '0.65rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '1.2px',
-                }}
-              >
-                {category.category}
-              </Typography>
-            )}
+            <Typography
+              noWrap
+              sx={{
+                px: `${NAV_MX + 8}px`,
+                color: theme.text.disabled,
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '1.2px',
+                opacity: expanded ? 1 : 0,
+                maxHeight: expanded ? '24px' : '0px',
+                py: expanded ? 0.75 : 0,
+                overflow: 'hidden',
+                transition: `opacity 200ms ease, max-height ${SIDEBAR_TRANSITION_DURATION} ${SIDEBAR_TRANSITION_EASING}, padding ${SIDEBAR_TRANSITION_DURATION} ${SIDEBAR_TRANSITION_EASING}`,
+                transitionDelay: expanded ? '60ms' : '0ms',
+              }}
+            >
+              {category.category}
+            </Typography>
             <List component="div" disablePadding>
               {category.items.map((item) => {
                 const isActive = isPathActive(item.path);
@@ -499,11 +515,11 @@ export default function HoverSidebar() {
                     onClick={() => { if (expanded) setExpanded(false); }}
                     sx={{
                       minHeight: 40,
-                      mx: expanded ? 1 : 0.5,
-                      px: expanded ? 1.5 : 0,
-                      justifyContent: expanded ? 'flex-start' : 'center',
+                      mx: `${NAV_MX}px`,
+                      px: 0,
                       borderRadius: '8px',
                       position: 'relative',
+                      overflow: 'hidden',
                       color: isActive ? theme.text.primary : theme.text.secondary,
                       backgroundColor: isActive ? `${theme.brand.primary}18` : 'transparent',
                       transition: 'background-color 150ms ease',
@@ -527,26 +543,29 @@ export default function HoverSidebar() {
                   >
                     <ListItemIcon
                       sx={{
-                        minWidth: expanded ? 36 : 0,
+                        width: ICON_COL_W,
+                        minWidth: ICON_COL_W,
                         justifyContent: 'center',
+                        flexShrink: 0,
                         color: isActive ? theme.brand.primary : theme.text.muted,
                       }}
                     >
                       {item.icon}
                     </ListItemIcon>
-                    {expanded && (
-                      <ListItemText
-                        primary={item.text}
-                        primaryTypographyProps={{
-                          noWrap: true,
-                          sx: {
-                            fontSize: 13,
-                            fontWeight: isActive ? 600 : 500,
-                            color: isActive ? theme.text.primary : theme.text.secondary,
-                          },
-                        }}
-                      />
-                    )}
+                    <ListItemText
+                      primary={item.text}
+                      primaryTypographyProps={{
+                        noWrap: true,
+                        sx: {
+                          fontSize: 13,
+                          fontWeight: isActive ? 600 : 500,
+                          color: isActive ? theme.text.primary : theme.text.secondary,
+                          opacity: expanded ? 1 : 0,
+                          transition: `opacity 250ms ${SIDEBAR_TRANSITION_EASING}`,
+                          transitionDelay: expanded ? '100ms' : '0ms',
+                        },
+                      }}
+                    />
                   </ListItemButton>
                 );
 
@@ -567,39 +586,21 @@ export default function HoverSidebar() {
       <Box
         sx={{
           borderTop: `1px solid ${theme.border.divider}`,
-          p: expanded ? 1.5 : 0.75,
+          py: 1,
+          px: 0,
           flexShrink: 0,
+          overflow: 'hidden',
         }}
       >
-        {expanded ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
-            <IconButton
-              onClick={toggleTheme}
-              size="small"
-              sx={{
-                color: theme.text.muted,
-                flexShrink: 0,
-                '&:hover': { color: theme.brand.primary },
-              }}
-            >
-              {isDark ? <Moon size={16} /> : <Sun size={16} />}
-            </IconButton>
-            <Typography noWrap sx={{ flex: 1, fontSize: 12, color: theme.text.muted }}>
-              {isDark ? '深色模式' : '浅色模式'}
-            </Typography>
-            <Switch
-              checked={isDark}
-              onChange={toggleTheme}
-              size="small"
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': { color: theme.brand.primary },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: theme.brand.primary },
-              }}
-            />
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Tooltip title={isDark ? '深色模式' : '浅色模式'} placement="right" arrow>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Tooltip title={!expanded ? (isDark ? '深色模式' : '浅色模式') : ''} placement="right" arrow>
+            <Box sx={{
+              width: SIDEBAR_COLLAPSED_WIDTH,
+              minWidth: SIDEBAR_COLLAPSED_WIDTH,
+              display: 'flex',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
               <IconButton
                 onClick={toggleTheme}
                 size="small"
@@ -607,9 +608,32 @@ export default function HoverSidebar() {
               >
                 {isDark ? <Moon size={16} /> : <Sun size={16} />}
               </IconButton>
-            </Tooltip>
-          </Box>
-        )}
+            </Box>
+          </Tooltip>
+          <Typography noWrap sx={{
+            flex: 1,
+            fontSize: 12,
+            color: theme.text.muted,
+            opacity: expanded ? 1 : 0,
+            transition: `opacity 250ms ${SIDEBAR_TRANSITION_EASING}`,
+            transitionDelay: expanded ? '100ms' : '0ms',
+          }}>
+            {isDark ? '深色模式' : '浅色模式'}
+          </Typography>
+          <Switch
+            checked={isDark}
+            onChange={toggleTheme}
+            size="small"
+            sx={{
+              mr: 1,
+              opacity: expanded ? 1 : 0,
+              transition: `opacity 250ms ${SIDEBAR_TRANSITION_EASING}`,
+              transitionDelay: expanded ? '100ms' : '0ms',
+              '& .MuiSwitch-switchBase.Mui-checked': { color: theme.brand.primary },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: theme.brand.primary },
+            }}
+          />
+        </Box>
       </Box>
     </Box>
   );

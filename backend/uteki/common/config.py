@@ -131,6 +131,9 @@ class Settings(BaseSettings):
     reload: bool = True
     enable_profiling: bool = False
 
+    # Tushare (US daily klines + PE/PB/市值)
+    tushare_token: Optional[str] = None
+
     # 其他数据源API Keys
     alpha_vantage_api_key: Optional[str] = None
     coingecko_api_key: Optional[str] = None

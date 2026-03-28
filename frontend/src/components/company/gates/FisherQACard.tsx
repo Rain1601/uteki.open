@@ -10,16 +10,16 @@ interface Props {
 }
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-  high: '#4caf50',
-  medium: '#ff9800',
-  low: '#f44336',
+  high: '#6dba82',
+  medium: '#c4a35a',
+  low: '#c47060',
 };
 
 const VERDICT_COLORS: Record<string, string> = {
-  compounder: '#4caf50',
-  cyclical: '#ff9800',
-  declining: '#f44336',
-  turnaround: '#2196f3',
+  compounder: '#6dba82',
+  cyclical: '#c4a35a',
+  declining: '#c47060',
+  turnaround: '#7da3d4',
 };
 
 export default function FisherQACard({ data }: Props) {
@@ -34,7 +34,7 @@ export default function FisherQACard({ data }: Props) {
   const verdictColor = VERDICT_COLORS[data.growth_verdict] || theme.text.muted;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Top stats */}
       <StatGrid
         items={[
@@ -44,7 +44,7 @@ export default function FisherQACard({ data }: Props) {
       />
 
       {/* Radar chart + Flags split */}
-      <Box sx={{ display: 'flex', gap: 2.5, flexDirection: { xs: 'column', md: 'row' } }}>
+      <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' } }}>
         {/* Radar chart */}
         {data.radar_data && (
           <Box sx={{ width: { xs: '100%', md: 280 }, flexShrink: 0 }}>
@@ -75,7 +75,7 @@ export default function FisherQACard({ data }: Props) {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {questions.map((q: any) => {
             const isOpen = expandedQ[q.id] ?? true;
-            const scoreColor = (q.score || 0) >= 7 ? '#4caf50' : (q.score || 0) >= 4 ? '#ff9800' : '#f44336';
+            const scoreColor = (q.score || 0) >= 7 ? '#6dba82' : (q.score || 0) >= 4 ? '#c4a35a' : '#c47060';
             const confColor = CONFIDENCE_COLORS[q.data_confidence] || theme.text.muted;
 
             return (
@@ -94,10 +94,10 @@ export default function FisherQACard({ data }: Props) {
                   }}
                 >
                   {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: theme.brand.primary, minWidth: 28 }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: theme.brand.primary, minWidth: 28 }}>
                     {q.id}
                   </Typography>
-                  <Typography sx={{ fontSize: 13, flex: 1, color: theme.text.primary, lineHeight: 1.4 }}>
+                  <Typography sx={{ fontSize: 12.5, flex: 1, color: theme.text.primary, lineHeight: 1.65 }}>
                     {q.question}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
@@ -105,18 +105,17 @@ export default function FisherQACard({ data }: Props) {
                       sx={{
                         width: 6, height: 6, borderRadius: '50%',
                         bgcolor: confColor,
-                        boxShadow: `0 0 6px ${confColor}80`,
                       }}
                       title={`Data confidence: ${q.data_confidence}`}
                     />
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: scoreColor, minWidth: 20, textAlign: 'right' }}>
+                    <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: scoreColor, minWidth: 20, textAlign: 'right' }}>
                       {q.score}
                     </Typography>
                   </Box>
                 </Box>
                 <Collapse in={isOpen}>
                   <Box sx={{ px: 2, pb: 1.5, pt: 0.5 }}>
-                    <Typography sx={{ fontSize: 13, color: theme.text.secondary, lineHeight: 1.6 }}>
+                    <Typography sx={{ fontSize: 12.5, color: theme.text.secondary, lineHeight: 1.65 }}>
                       {q.answer}
                     </Typography>
                     <LinearProgress
@@ -130,7 +129,6 @@ export default function FisherQACard({ data }: Props) {
                         '& .MuiLinearProgress-bar': {
                           bgcolor: scoreColor,
                           borderRadius: 2,
-                          boxShadow: `0 0 6px ${scoreColor}60`,
                         },
                       }}
                     />

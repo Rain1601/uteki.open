@@ -1,7 +1,9 @@
 """TradingView UDF-compatible datafeed API.
 
-Serves OHLCV data from FMP with Redis caching so the self-hosted
-TradingView Charting Library can display any US stock/ETF symbol.
+Serves OHLCV data with a DB-first strategy:
+  1. Check local ``klines_daily`` / ``symbols`` tables
+  2. Fall back to FMP API if DB has no data
+  3. Redis caching layer on top
 
 Endpoints (all GET, mounted at /api/udf):
     /config          — server capabilities
@@ -14,15 +16,17 @@ Endpoints (all GET, mounted at /api/udf):
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import date as date_type, datetime, timezone
 from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Query, Request
+from sqlalchemy import select, text
 from starlette.responses import JSONResponse
 
 from uteki.common.config import settings
 from uteki.common.database import db_manager
+from uteki.domains.data.models import KlineDaily, Symbol
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +111,59 @@ async def udf_time():
 
 # ── /symbols ─────────────────────────────────────────────────────────────────
 
-@router.get("/symbols")
-async def udf_symbols(symbol: str = Query(...)):
-    cache_key = f"udf:sym:{symbol}"
-    cached = await _cache_get(cache_key)
-    if cached:
-        return json.loads(cached)
+def _build_udf_symbol_info(
+    symbol: str,
+    description: str = "",
+    exchange: str = "NYSE",
+    currency: str = "USD",
+) -> dict:
+    """Build a UDF-compliant symbol info dict."""
+    return {
+        "name": symbol,
+        "ticker": symbol,
+        "description": description or symbol,
+        "type": "stock",
+        "exchange-traded": exchange,
+        "exchange-listed": exchange,
+        "timezone": "America/New_York",
+        "session": "0930-1600",
+        "minmov": 1,
+        "minmov2": 0,
+        "pricescale": 100,
+        "pointvalue": 1,
+        "has_intraday": False,
+        "has_daily": True,
+        "has_weekly_and_monthly": True,
+        "supported_resolutions": ["D", "W", "M"],
+        "visible_plots_set": "ohlcv",
+        "currency_code": currency,
+    }
 
+
+async def _resolve_symbol_from_db(symbol: str) -> Optional[dict]:
+    """Try to resolve symbol info from our local symbols table."""
+    try:
+        async with db_manager.get_postgres_session() as session:
+            stmt = select(Symbol).where(
+                Symbol.symbol == symbol.upper(),
+                Symbol.is_active.is_(True),
+            )
+            result = await session.execute(stmt)
+            row = result.scalar_one_or_none()
+            if row:
+                return _build_udf_symbol_info(
+                    symbol=row.symbol,
+                    description=row.name or row.symbol,
+                    exchange=row.exchange or "NYSE",
+                    currency=row.currency or "USD",
+                )
+    except Exception as e:
+        logger.debug(f"DB symbol lookup failed for {symbol}: {e}")
+    return None
+
+
+async def _resolve_symbol_from_fmp(symbol: str) -> Optional[dict]:
+    """Fallback: resolve symbol info from FMP /profile API."""
     client = await _client()
     try:
         resp = await client.get(
@@ -123,38 +173,45 @@ async def udf_symbols(symbol: str = Query(...)):
         resp.raise_for_status()
         data = resp.json()
         if not data:
-            return {"s": "error", "errmsg": f"unknown_symbol {symbol}"}
+            return None
 
         p = data[0] if isinstance(data, list) else data
         exchange = p.get("exchangeShortName") or p.get("exchange") or "NYSE"
 
-        info = {
-            "name": symbol,
-            "ticker": symbol,
-            "description": p.get("companyName", symbol),
-            "type": "stock",
-            "exchange-traded": exchange,
-            "exchange-listed": exchange,
-            "timezone": "America/New_York",
-            "session": "0930-1600",
-            "minmov": 1,
-            "minmov2": 0,
-            "pricescale": 100,
-            "pointvalue": 1,
-            "has_intraday": False,
-            "has_daily": True,
-            "has_weekly_and_monthly": True,
-            "supported_resolutions": ["D", "W", "M"],
-            "visible_plots_set": "ohlcv",
-            "currency_code": p.get("currency", "USD"),
-            "logo_urls": [p["image"]] if p.get("image") else [],
-        }
-
-        await _cache_set(cache_key, json.dumps(info), _SYMBOL_TTL)
+        info = _build_udf_symbol_info(
+            symbol=symbol,
+            description=p.get("companyName", symbol),
+            exchange=exchange,
+            currency=p.get("currency", "USD"),
+        )
+        # FMP provides logo
+        if p.get("image"):
+            info["logo_urls"] = [p["image"]]
         return info
     except Exception as e:
-        logger.error(f"UDF symbols error for {symbol}: {e}")
-        return {"s": "error", "errmsg": str(e)}
+        logger.error(f"FMP symbol lookup failed for {symbol}: {e}")
+        return None
+
+
+@router.get("/symbols")
+async def udf_symbols(symbol: str = Query(...)):
+    cache_key = f"udf:sym:{symbol}"
+    cached = await _cache_get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    # 1) Try local DB first
+    info = await _resolve_symbol_from_db(symbol)
+
+    # 2) Fallback to FMP
+    if info is None:
+        info = await _resolve_symbol_from_fmp(symbol)
+
+    if info is None:
+        return {"s": "error", "errmsg": f"unknown_symbol {symbol}"}
+
+    await _cache_set(cache_key, json.dumps(info), _SYMBOL_TTL)
+    return info
 
 
 # ── /search ──────────────────────────────────────────────────────────────────
@@ -174,35 +231,171 @@ async def udf_search(
     if cached:
         return json.loads(cached)
 
-    client = await _client()
+    # Try local DB first — ILIKE search on symbol and name
+    results = []
     try:
-        resp = await client.get(
-            f"{FMP_BASE}/search-name",
-            params={"query": query, "apikey": settings.fmp_api_key, "limit": limit},
-        )
-        resp.raise_for_status()
-        raw = resp.json() or []
-
-        results = [
-            {
-                "symbol": item["symbol"],
-                "full_name": item["symbol"],
-                "description": item.get("name", ""),
-                "exchange": item.get("exchange", ""),
-                "ticker": item["symbol"],
-                "type": "stock",
-            }
-            for item in raw
-        ]
-
-        await _cache_set(cache_key, json.dumps(results), _SEARCH_TTL)
-        return results
+        async with db_manager.get_postgres_session() as session:
+            sql = text("""
+                SELECT symbol, name, exchange, asset_type
+                FROM market_data.symbols
+                WHERE is_active = true
+                  AND (symbol ILIKE :pattern OR name ILIKE :pattern)
+                ORDER BY symbol
+                LIMIT :limit
+            """)
+            rows = await session.execute(
+                sql, {"pattern": f"%{query}%", "limit": limit}
+            )
+            for r in rows.mappings().all():
+                results.append({
+                    "symbol": r["symbol"],
+                    "full_name": r["symbol"],
+                    "description": r["name"] or "",
+                    "exchange": r["exchange"] or "",
+                    "ticker": r["symbol"],
+                    "type": "stock" if r["asset_type"] in ("us_stock", "hk_stock", "a_share") else r["asset_type"],
+                })
     except Exception as e:
-        logger.error(f"UDF search error: {e}")
-        return []
+        logger.debug(f"DB search failed: {e}")
+
+    # If DB returned results, use them; otherwise fallback to FMP
+    if not results:
+        client = await _client()
+        try:
+            resp = await client.get(
+                f"{FMP_BASE}/search-name",
+                params={"query": query, "apikey": settings.fmp_api_key, "limit": limit},
+            )
+            resp.raise_for_status()
+            raw = resp.json() or []
+
+            results = [
+                {
+                    "symbol": item["symbol"],
+                    "full_name": item["symbol"],
+                    "description": item.get("name", ""),
+                    "exchange": item.get("exchange", ""),
+                    "ticker": item["symbol"],
+                    "type": "stock",
+                }
+                for item in raw
+            ]
+        except Exception as e:
+            logger.error(f"UDF search error: {e}")
+
+    await _cache_set(cache_key, json.dumps(results), _SEARCH_TTL)
+    return results
 
 
 # ── /history ─────────────────────────────────────────────────────────────────
+
+async def _fetch_history_from_db(
+    symbol: str, start_date: str, end_date: str
+) -> Optional[dict]:
+    """Try to load OHLCV bars from klines_daily.
+
+    Returns UDF columnar dict if data found, None otherwise.
+    """
+    try:
+        async with db_manager.get_postgres_session() as session:
+            stmt = (
+                select(KlineDaily)
+                .where(
+                    KlineDaily.symbol == symbol.upper(),
+                    KlineDaily.time >= date_type.fromisoformat(start_date),
+                    KlineDaily.time <= date_type.fromisoformat(end_date),
+                )
+                .order_by(KlineDaily.time.asc())
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+
+            if not rows:
+                return None
+
+            t_arr, o_arr, h_arr, l_arr, c_arr, v_arr = [], [], [], [], [], []
+            for bar in rows:
+                dt = datetime(
+                    bar.time.year, bar.time.month, bar.time.day,
+                    tzinfo=timezone.utc,
+                )
+                t_arr.append(int(dt.timestamp()))
+                o_arr.append(float(bar.open) if bar.open is not None else 0)
+                h_arr.append(float(bar.high) if bar.high is not None else 0)
+                l_arr.append(float(bar.low) if bar.low is not None else 0)
+                c_arr.append(float(bar.close) if bar.close is not None else 0)
+                v_arr.append(float(bar.volume) if bar.volume is not None else 0)
+
+            return {
+                "s": "ok",
+                "t": t_arr,
+                "o": o_arr,
+                "h": h_arr,
+                "l": l_arr,
+                "c": c_arr,
+                "v": v_arr,
+            }
+    except Exception as e:
+        logger.debug(f"DB history lookup failed for {symbol}: {e}")
+        return None
+
+
+async def _fetch_history_from_fmp(
+    symbol: str, start_date: str, end_date: str
+) -> Optional[dict]:
+    """Fallback: fetch OHLCV bars from FMP API."""
+    client = await _client()
+    try:
+        resp = await client.get(
+            f"{FMP_BASE}/historical-price-eod/full",
+            params={
+                "symbol": symbol,
+                "apikey": settings.fmp_api_key,
+                "from": start_date,
+                "to": end_date,
+            },
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+        historical = raw if isinstance(raw, list) else raw.get("historical", [])
+
+        if not historical:
+            return None
+
+        # FMP returns newest-first; reverse to chronological
+        historical.sort(key=lambda x: x["date"])
+
+        t_arr, o_arr, h_arr, l_arr, c_arr, v_arr = [], [], [], [], [], []
+        for bar in historical:
+            try:
+                dt = datetime.strptime(bar["date"][:10], "%Y-%m-%d").replace(
+                    tzinfo=timezone.utc
+                )
+                t_arr.append(int(dt.timestamp()))
+                o_arr.append(float(bar["open"]))
+                h_arr.append(float(bar["high"]))
+                l_arr.append(float(bar["low"]))
+                c_arr.append(float(bar["close"]))
+                v_arr.append(float(bar.get("volume", 0)))
+            except (KeyError, ValueError):
+                continue
+
+        if not t_arr:
+            return None
+
+        return {
+            "s": "ok",
+            "t": t_arr,
+            "o": o_arr,
+            "h": h_arr,
+            "l": l_arr,
+            "c": c_arr,
+            "v": v_arr,
+        }
+    except Exception as e:
+        logger.error(f"FMP history fetch failed for {symbol}: {e}")
+        return None
+
 
 @router.get("/history")
 async def udf_history(request: Request):
@@ -223,53 +416,15 @@ async def udf_history(request: Request):
     if cached:
         return JSONResponse(json.loads(cached))
 
-    client = await _client()
-    try:
-        resp = await client.get(
-            f"{FMP_BASE}/historical-price-eod/full",
-            params={
-                "symbol": symbol,
-                "apikey": settings.fmp_api_key,
-                "from": start_date,
-                "to": end_date,
-            },
-        )
-        resp.raise_for_status()
-        raw = resp.json()
-        historical = raw if isinstance(raw, list) else raw.get("historical", [])
+    # 1) Try local DB first
+    result = await _fetch_history_from_db(symbol, start_date, end_date)
 
-        if not historical:
-            return JSONResponse({"s": "no_data"})
+    # 2) Fallback to FMP API
+    if result is None:
+        result = await _fetch_history_from_fmp(symbol, start_date, end_date)
 
-        # FMP returns newest-first; reverse to chronological
-        historical.sort(key=lambda x: x["date"])
+    if result is None:
+        return JSONResponse({"s": "no_data"})
 
-        t_arr, o_arr, h_arr, l_arr, c_arr, v_arr = [], [], [], [], [], []
-        for bar in historical:
-            try:
-                dt = datetime.strptime(bar["date"][:10], "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc
-                )
-                t_arr.append(int(dt.timestamp()))
-                o_arr.append(float(bar["open"]))
-                h_arr.append(float(bar["high"]))
-                l_arr.append(float(bar["low"]))
-                c_arr.append(float(bar["close"]))
-                v_arr.append(float(bar.get("volume", 0)))
-            except (KeyError, ValueError):
-                continue
-
-        result = {
-            "s": "ok",
-            "t": t_arr,
-            "o": o_arr,
-            "h": h_arr,
-            "l": l_arr,
-            "c": c_arr,
-            "v": v_arr,
-        }
-        await _cache_set(cache_key, json.dumps(result), _HISTORY_TTL)
-        return JSONResponse(result)
-    except Exception as e:
-        logger.error(f"UDF history error for {symbol}: {e}")
-        return JSONResponse({"s": "error", "errmsg": str(e)})
+    await _cache_set(cache_key, json.dumps(result), _HISTORY_TTL)
+    return JSONResponse(result)

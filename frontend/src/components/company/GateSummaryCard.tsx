@@ -14,8 +14,8 @@ interface Props {
 function MetricChip({ label, value, theme }: { label: string; value: string | number; theme: any }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Typography sx={{ fontSize: 11, color: theme.text.muted, whiteSpace: 'nowrap' }}>{label}</Typography>
-      <Typography sx={{ fontSize: 13, fontWeight: 600, color: theme.text.primary, whiteSpace: 'nowrap' }}>
+      <Typography sx={{ fontSize: 11, color: theme.text.disabled, whiteSpace: 'nowrap' }}>{label}</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.secondary, whiteSpace: 'nowrap' }}>
         {value}
       </Typography>
     </Box>
@@ -24,7 +24,7 @@ function MetricChip({ label, value, theme }: { label: string; value: string | nu
 
 // ── Divider ──
 function VDivider({ theme }: { theme: any }) {
-  return <Box sx={{ width: 1, height: 16, bgcolor: theme.border.subtle, mx: 0.5 }} />;
+  return <Box sx={{ width: 1, height: 14, bgcolor: theme.border.subtle, mx: 0.5 }} />;
 }
 
 // ── Badge variant mapping ──
@@ -43,10 +43,10 @@ const GATE_BADGE_VARIANT: Record<string, BadgeVariant> = {
 function extractGateInfo(gateNum: number, result: GateResult) {
   const p = result.parsed || {};
   const raw = result.raw || '';
-  const fallbackSummary = p.summary || raw.slice(0, 120).replace(/\n/g, ' ') + (raw.length > 120 ? '...' : '');
+  const fallbackSummary = p.summary || raw.slice(0, 100).replace(/\n/g, ' ') + (raw.length > 100 ? '…' : '');
 
   switch (gateNum) {
-    case 1: { // business_analysis
+    case 1: {
       const quality = p.business_quality || '';
       const sustainability = p.sustainability_score;
       return {
@@ -58,7 +58,7 @@ function extractGateInfo(gateNum: number, result: GateResult) {
         summary: fallbackSummary,
       };
     }
-    case 2: { // fisher_qa
+    case 2: {
       const total = p.total_score;
       const verdict = p.growth_verdict || '';
       return {
@@ -70,7 +70,7 @@ function extractGateInfo(gateNum: number, result: GateResult) {
         summary: fallbackSummary,
       };
     }
-    case 3: { // moat_assessment
+    case 3: {
       const width = p.moat_width || '';
       const trend = p.moat_trend || '';
       const durability = p.moat_durability_years;
@@ -84,7 +84,7 @@ function extractGateInfo(gateNum: number, result: GateResult) {
         summary: fallbackSummary,
       };
     }
-    case 4: { // management_assessment
+    case 4: {
       const mgmtScore = p.management_score;
       const integrity = p.integrity_score;
       const succession = p.succession_risk || '';
@@ -97,7 +97,7 @@ function extractGateInfo(gateNum: number, result: GateResult) {
         summary: fallbackSummary,
       };
     }
-    case 5: { // reverse_test
+    case 5: {
       const resilience = p.resilience_score;
       const flags = Array.isArray(p.red_flags) ? p.red_flags.filter((f: any) => f.triggered).length : 0;
       return {
@@ -109,7 +109,7 @@ function extractGateInfo(gateNum: number, result: GateResult) {
         summary: fallbackSummary,
       };
     }
-    case 6: { // valuation
+    case 6: {
       const assessment = p.price_assessment || '';
       const margin = p.safety_margin || '';
       const confidence = p.buy_confidence;
@@ -122,7 +122,7 @@ function extractGateInfo(gateNum: number, result: GateResult) {
         summary: fallbackSummary,
       };
     }
-    case 7: { // final_verdict
+    case 7: {
       const action = p.action || '';
       const conviction = p.conviction;
       const quality = p.quality_verdict || '';
@@ -154,17 +154,15 @@ export default function GateSummaryCard({ gateNum, result, theme, onClick }: Pro
         mb: 0.25,
         display: 'flex',
         alignItems: 'center',
-        gap: 1,
-        py: 0.75,
-        px: 1.5,
-        borderRadius: '6px',
-        borderLeft: `2px solid ${theme.border.subtle}`,
+        gap: 0.75,
+        py: 0.5,
+        px: 1.25,
+        borderRadius: '5px',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.15s',
+        transition: 'background 0.15s ease',
         animation: 'tl-card-in 0.3s ease-out',
         '&:hover': onClick ? {
           bgcolor: theme.background.secondary,
-          borderLeftColor: theme.brand.primary,
         } : {},
       }}
     >
@@ -186,12 +184,12 @@ export default function GateSummaryCard({ gateNum, result, theme, onClick }: Pro
         </Box>
       )}
 
-      {/* Summary — single line ellipsis */}
+      {/* Summary */}
       {info.summary && (
         <Typography
           sx={{
-            fontSize: 12.5,
-            color: theme.text.muted,
+            fontSize: 12,
+            color: theme.text.disabled,
             lineHeight: 1.4,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -204,9 +202,9 @@ export default function GateSummaryCard({ gateNum, result, theme, onClick }: Pro
         </Typography>
       )}
 
-      {/* Chevron arrow */}
+      {/* Chevron */}
       {onClick && (
-        <Box sx={{ color: theme.text.disabled, display: 'flex', flexShrink: 0, ml: 0.5 }}>
+        <Box sx={{ color: theme.text.disabled, display: 'flex', flexShrink: 0, ml: 0.25 }}>
           <ChevronRight size={14} />
         </Box>
       )}

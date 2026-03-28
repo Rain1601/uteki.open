@@ -1,5 +1,6 @@
 """IngestionService — batch ingestion of K-line data from multiple providers."""
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -15,6 +16,11 @@ from uteki.domains.data.providers.base import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Rate-limiting defaults
+SYMBOL_DELAY = 0.8          # seconds between symbols
+CONSECUTIVE_FAIL_LIMIT = 5  # consecutive failures before cooldown
+COOLDOWN_DELAY = 30.0       # seconds to pause after consecutive failures
 
 
 class IngestionService:
@@ -40,7 +46,7 @@ class IngestionService:
             logger.warning(f"No provider for {sym} (asset_type={asset_type})")
             return {"symbol": sym, "inserted": 0, "updated": 0, "status": "skipped"}
 
-        # Determine start date: last date in DB + 1 day, or 5 years ago
+        # Determine start date: last date in DB + 1 day, or 20 years ago
         if start is None:
             start = await self._get_incremental_start(sym)
 
@@ -87,16 +93,41 @@ class IngestionService:
         total_inserted = 0
         total_updated = 0
         total_failed = 0
+        consecutive_failures = 0
+        total = len(symbol_records)
 
-        for sym_rec in symbol_records:
+        for idx, sym_rec in enumerate(symbol_records, 1):
+            sym_name = sym_rec["symbol"]
+
             result = await self.ingest_symbol(sym_rec)
             results.append(result)
 
             if result["status"] == "success":
-                total_inserted += result.get("inserted", 0)
+                rows_count = result.get("inserted", 0)
+                total_inserted += rows_count
                 total_updated += result.get("updated", 0)
+                consecutive_failures = 0
+                logger.info(f"[{idx}/{total}] {sym_name}: {rows_count} rows")
             elif result["status"] == "failed":
                 total_failed += 1
+                consecutive_failures += 1
+                logger.warning(f"[{idx}/{total}] {sym_name}: FAILED — {result.get('error', '?')}")
+
+                # Cooldown after consecutive failures (likely rate-limited)
+                if consecutive_failures >= CONSECUTIVE_FAIL_LIMIT:
+                    logger.warning(
+                        f"{consecutive_failures} consecutive failures — "
+                        f"pausing {COOLDOWN_DELAY}s to avoid rate-limit…"
+                    )
+                    await asyncio.sleep(COOLDOWN_DELAY)
+                    consecutive_failures = 0
+            else:
+                # skipped
+                logger.info(f"[{idx}/{total}] {sym_name}: skipped")
+
+            # Rate-limit: delay between symbols
+            if idx < total:
+                await asyncio.sleep(SYMBOL_DELAY)
 
         # Finalize run log
         status = "success"
@@ -136,6 +167,63 @@ class IngestionService:
             "results": results,
         }
 
+    async def enrich_tushare(self) -> Dict:
+        """Enrich existing klines with PE/PB/total_mv/float_mv/vwap from Tushare.
+
+        Only updates rows where pe IS NULL.
+        """
+        from uteki.domains.data.providers.base import DataProviderFactory, DataProvider
+
+        try:
+            provider = DataProviderFactory._create_provider(DataProvider.TUSHARE)
+        except Exception as e:
+            return {"status": "failed", "error": f"Cannot create Tushare provider: {e}"}
+
+        # Find symbols that have klines but no PE data
+        async with db_manager.get_postgres_session() as session:
+            result = await session.execute(text("""
+                SELECT DISTINCT k.symbol, k.symbol_id
+                FROM market_data.klines_daily k
+                WHERE k.pe IS NULL
+                ORDER BY k.symbol
+            """))
+            symbols_to_enrich = [
+                {"symbol": row[0], "symbol_id": row[1]} for row in result.fetchall()
+            ]
+
+        if not symbols_to_enrich:
+            return {"status": "success", "message": "No symbols need enrichment", "enriched": 0}
+
+        total = len(symbols_to_enrich)
+        enriched_count = 0
+        failed_count = 0
+
+        for idx, sym_info in enumerate(symbols_to_enrich, 1):
+            sym = sym_info["symbol"]
+            try:
+                rows = await provider.fetch_daily_klines(sym)
+                if not rows:
+                    logger.info(f"[enrich {idx}/{total}] {sym}: no Tushare data")
+                    continue
+
+                updated = await self._update_enrichment_fields(sym, rows)
+                enriched_count += updated
+                logger.info(f"[enrich {idx}/{total}] {sym}: updated {updated} rows")
+            except Exception as e:
+                failed_count += 1
+                logger.warning(f"[enrich {idx}/{total}] {sym}: FAILED — {e}")
+
+            # Tushare rate limit: ~200 req/min → 0.3s interval
+            if idx < total:
+                await asyncio.sleep(0.35)
+
+        return {
+            "status": "success",
+            "total_symbols": total,
+            "rows_enriched": enriched_count,
+            "failed": failed_count,
+        }
+
     # ── Internal helpers ──
 
     async def _get_incremental_start(self, symbol: str) -> date:
@@ -152,7 +240,7 @@ class IngestionService:
 
         if last_date:
             return last_date + timedelta(days=1)
-        return date.today() - timedelta(days=5 * 365)
+        return date.today() - timedelta(days=20 * 365)
 
     async def _upsert_klines(
         self,
@@ -161,7 +249,10 @@ class IngestionService:
         symbol_id: str,
         source: str,
     ) -> tuple[int, int]:
-        """Bulk upsert kline rows using PostgreSQL ON CONFLICT."""
+        """Bulk upsert kline rows using PostgreSQL ON CONFLICT.
+
+        Uses multi-row VALUES to minimise DB round-trips.
+        """
         if not rows:
             return 0, 0
 
@@ -179,40 +270,98 @@ class IngestionService:
                     "volume": r.volume,
                     "adj_close": r.adj_close,
                     "turnover": r.turnover,
+                    "pe": r.pe,
+                    "pb": r.pb,
+                    "total_mv": r.total_mv,
+                    "float_mv": r.float_mv,
+                    "vwap": r.vwap,
                     "source": source,
                     "quality": 0,
                 })
 
-            # Use raw SQL for ON CONFLICT upsert (TimescaleDB hypertable)
-            sql = text("""
-                INSERT INTO market_data.klines_daily
-                    (time, symbol, symbol_id, open, high, low, close,
-                     volume, adj_close, turnover, source, quality)
-                VALUES
-                    (:time, :symbol, :symbol_id, :open, :high, :low, :close,
-                     :volume, :adj_close, :turnover, :source, :quality)
-                ON CONFLICT (time, symbol) DO UPDATE SET
-                    open = EXCLUDED.open,
-                    high = EXCLUDED.high,
-                    low = EXCLUDED.low,
-                    close = EXCLUDED.close,
-                    volume = EXCLUDED.volume,
-                    adj_close = EXCLUDED.adj_close,
-                    turnover = EXCLUDED.turnover,
-                    source = EXCLUDED.source
-            """)
-
-            # Execute in batches of 500
+            # Build multi-row INSERT … ON CONFLICT in batches
             inserted = 0
             batch_size = 500
             for i in range(0, len(values), batch_size):
                 batch = values[i:i + batch_size]
-                for v in batch:
-                    await session.execute(sql, v)
+                # Generate numbered placeholders for each row
+                row_placeholders = []
+                params: dict = {}
+                for j, v in enumerate(batch):
+                    suffix = f"_{j}"
+                    row_placeholders.append(
+                        f"(:time{suffix}, :symbol{suffix}, :symbol_id{suffix}, "
+                        f":open{suffix}, :high{suffix}, :low{suffix}, :close{suffix}, "
+                        f":volume{suffix}, :adj_close{suffix}, :turnover{suffix}, "
+                        f":pe{suffix}, :pb{suffix}, :total_mv{suffix}, :float_mv{suffix}, :vwap{suffix}, "
+                        f":source{suffix}, :quality{suffix})"
+                    )
+                    for k, val in v.items():
+                        params[f"{k}{suffix}"] = val
+
+                sql = text(
+                    "INSERT INTO market_data.klines_daily "
+                    "(time, symbol, symbol_id, open, high, low, close, "
+                    "volume, adj_close, turnover, pe, pb, total_mv, float_mv, vwap, "
+                    "source, quality) VALUES "
+                    + ", ".join(row_placeholders)
+                    + " ON CONFLICT (time, symbol) DO UPDATE SET "
+                    "open = EXCLUDED.open, high = EXCLUDED.high, "
+                    "low = EXCLUDED.low, close = EXCLUDED.close, "
+                    "volume = EXCLUDED.volume, adj_close = EXCLUDED.adj_close, "
+                    "turnover = EXCLUDED.turnover, "
+                    "pe = COALESCE(EXCLUDED.pe, market_data.klines_daily.pe), "
+                    "pb = COALESCE(EXCLUDED.pb, market_data.klines_daily.pb), "
+                    "total_mv = COALESCE(EXCLUDED.total_mv, market_data.klines_daily.total_mv), "
+                    "float_mv = COALESCE(EXCLUDED.float_mv, market_data.klines_daily.float_mv), "
+                    "vwap = COALESCE(EXCLUDED.vwap, market_data.klines_daily.vwap), "
+                    "source = EXCLUDED.source"
+                )
+                await session.execute(sql, params)
                 inserted += len(batch)
 
             logger.info(f"Upserted {inserted} kline rows for {symbol}")
-            return inserted, 0  # PostgreSQL ON CONFLICT doesn't report update vs insert separately
+            return inserted, 0
+
+    async def _update_enrichment_fields(
+        self, symbol: str, rows: List[KlineRow],
+    ) -> int:
+        """Update only pe/pb/total_mv/float_mv/vwap for existing kline rows."""
+        if not rows:
+            return 0
+
+        updated = 0
+        async with db_manager.get_postgres_session() as session:
+            batch_size = 500
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i:i + batch_size]
+                for j, r in enumerate(batch):
+                    # Skip rows with no enrichment data
+                    if r.pe is None and r.pb is None and r.total_mv is None:
+                        continue
+
+                    params = {
+                        f"time_{j}": r.time,
+                        f"symbol_{j}": symbol,
+                        f"pe_{j}": r.pe,
+                        f"pb_{j}": r.pb,
+                        f"total_mv_{j}": r.total_mv,
+                        f"float_mv_{j}": r.float_mv,
+                        f"vwap_{j}": r.vwap,
+                    }
+                    sql = text(
+                        f"UPDATE market_data.klines_daily SET "
+                        f"pe = COALESCE(:pe_{j}, pe), "
+                        f"pb = COALESCE(:pb_{j}, pb), "
+                        f"total_mv = COALESCE(:total_mv_{j}, total_mv), "
+                        f"float_mv = COALESCE(:float_mv_{j}, float_mv), "
+                        f"vwap = COALESCE(:vwap_{j}, vwap) "
+                        f"WHERE time = :time_{j} AND symbol = :symbol_{j}"
+                    )
+                    await session.execute(sql, params)
+                    updated += 1
+
+        return updated
 
     async def _get_active_symbols(
         self,

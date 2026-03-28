@@ -20,7 +20,7 @@ export default function ManagementCard({ data }: Props) {
   ].filter((s) => s.text);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Score bars */}
       <Box>
         <ScoreBar label="Integrity" score={data.integrity_score || 0} />
@@ -31,7 +31,7 @@ export default function ManagementCard({ data }: Props) {
 
       {/* Succession risk */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Typography sx={{ fontSize: 13, color: theme.text.secondary }}>
+        <Typography sx={{ fontSize: 12.5, color: theme.text.secondary }}>
           Succession Risk:
         </Typography>
         {data.succession_risk && (

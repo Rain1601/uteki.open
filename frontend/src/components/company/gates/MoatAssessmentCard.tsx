@@ -8,15 +8,15 @@ interface Props {
 }
 
 const WIDTH_CONFIG: Record<string, { label: string; color: string; pct: number }> = {
-  wide:   { label: 'Wide',   color: '#4caf50', pct: 90 },
-  narrow: { label: 'Narrow', color: '#ff9800', pct: 50 },
-  none:   { label: 'None',   color: '#f44336', pct: 10 },
+  wide:   { label: 'Wide',   color: '#6dba82', pct: 90 },
+  narrow: { label: 'Narrow', color: '#c4a35a', pct: 50 },
+  none:   { label: 'None',   color: '#c47060', pct: 10 },
 };
 
 const STRENGTH_COLORS: Record<string, string> = {
-  strong: '#4caf50',
-  moderate: '#ff9800',
-  weak: '#f44336',
+  strong: '#6dba82',
+  moderate: '#c4a35a',
+  weak: '#c47060',
 };
 
 const TREND_ICONS: Record<string, React.ReactNode> = {
@@ -26,9 +26,9 @@ const TREND_ICONS: Record<string, React.ReactNode> = {
 };
 
 const TREND_COLORS: Record<string, string> = {
-  strengthening: '#4caf50',
-  stable: '#ff9800',
-  eroding: '#f44336',
+  strengthening: '#6dba82',
+  stable: '#c4a35a',
+  eroding: '#c47060',
 };
 
 export default function MoatAssessmentCard({ data }: Props) {
@@ -37,7 +37,7 @@ export default function MoatAssessmentCard({ data }: Props) {
   const trendColor = TREND_COLORS[data.moat_trend] || theme.text.muted;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Top stats: width + trend + durability */}
       <StatGrid
         items={[
@@ -77,9 +77,9 @@ export default function MoatAssessmentCard({ data }: Props) {
                     <Chip
                       label={m.type}
                       size="small"
-                      sx={{ fontSize: 12, fontWeight: 700, bgcolor: `${sColor}15`, color: sColor }}
+                      sx={{ fontSize: 11, fontWeight: 600, bgcolor: `${sColor}15`, color: sColor }}
                     />
-                    <Typography sx={{ fontSize: 13, color: theme.text.secondary, flex: 1 }}>
+                    <Typography sx={{ fontSize: 12.5, color: theme.text.secondary, flex: 1, lineHeight: 1.65 }}>
                       {m.evidence}
                     </Typography>
                   </Box>
@@ -108,7 +108,7 @@ export default function MoatAssessmentCard({ data }: Props) {
 
       {/* Competitive position */}
       {data.competitive_position && (
-        <Typography sx={{ fontSize: 13, color: theme.text.muted, fontStyle: 'italic' }}>
+        <Typography sx={{ fontSize: 12.5, color: theme.text.muted, fontStyle: 'italic', lineHeight: 1.65 }}>
           {data.competitive_position}
         </Typography>
       )}
