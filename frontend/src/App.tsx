@@ -11,7 +11,6 @@ import IndexAgentPage from './pages/IndexAgentPage';
 import CompanyAgentPage from './pages/CompanyAgentPage';
 import ApiTestPage from './pages/ApiTestPage';
 
-import AgentDashboardPage from './pages/AgentDashboardPage';
 import MarketDashboardPage from './pages/MarketDashboardPage';
 
 
@@ -38,8 +37,7 @@ function App() {
         <Route path="macro/fomc-calendar" element={<FOMCCalendarPage />} />
         <Route path="macro/market-dashboard" element={<MarketDashboardPage />} />
         <Route path="trading/snb" element={<SnbTradingPage />} />
-        <Route path="agent-dashboard" element={<AgentDashboardPage />} />
-        <Route path="index-agent" element={<IndexAgentPage />} />
+<Route path="index-agent" element={<IndexAgentPage />} />
         <Route path="company-agent" element={<CompanyAgentPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

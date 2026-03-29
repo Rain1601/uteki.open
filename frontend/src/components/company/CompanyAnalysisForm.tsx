@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, TextField, Button, Select, MenuItem, FormControl, Typography, Badge } from '@mui/material';
-import { Search, Trash2 } from 'lucide-react';
+import { Box, TextField, IconButton, Select, MenuItem, FormControl, Typography, Badge } from '@mui/material';
+import { Search, ArrowRight, Trash2 } from 'lucide-react';
 import { useTheme } from '../../theme/ThemeProvider';
 import { invalidateCompanyCache } from '../../api/company';
 
@@ -11,16 +11,16 @@ interface Props {
   elapsedMs: number;
 }
 
-const PROVIDERS = [
-  { value: '', label: '自动选择' },
-  { value: 'anthropic', label: 'Anthropic (Claude)' },
-  { value: 'openai', label: 'OpenAI (GPT-4o)' },
+const MODEL_OPTIONS = [
+  { value: '', label: 'Auto' },
   { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'google', label: 'Google (Gemini)' },
-  { value: 'qwen', label: '通义千问' },
+  { value: 'anthropic', label: 'Claude' },
+  { value: 'openai', label: 'GPT-4.1' },
+  { value: 'google', label: 'Gemini' },
+  { value: 'qwen', label: 'Qwen' },
 ];
 
-export default function CompanyAnalysisForm({ onAnalyze, runningCount = 0, elapsedMs }: Props) {
+export default function CompanyAnalysisForm({ onAnalyze, runningCount = 0 }: Props) {
   const { theme } = useTheme();
   const [symbol, setSymbol] = useState('');
   const [provider, setProvider] = useState('');
@@ -39,108 +39,152 @@ export default function CompanyAnalysisForm({ onAnalyze, runningCount = 0, elaps
     } catch { /* ignore */ }
   };
 
-  const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return m > 0 ? `${m}:${String(sec).padStart(2, '0')}` : `${sec}s`;
-  };
+  const hasSymbol = symbol.trim().length > 0;
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-      <TextField
-        size="small"
-        placeholder="输入股票代码 (如 AAPL, TSLA)"
-        value={symbol}
-        onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-        onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-        sx={{
-          width: 240,
-          '& .MuiOutlinedInput-root': {
-            color: theme.text.primary,
-            bgcolor: theme.background.tertiary,
-            '& fieldset': { borderColor: theme.border.default },
-            '&:hover fieldset': { borderColor: theme.border.hover },
-            '&.Mui-focused fieldset': { borderColor: theme.brand.primary },
-          },
-          '& .MuiInputBase-input': { fontSize: 14 },
-        }}
-      />
-
-      <FormControl size="small" sx={{ minWidth: 160 }}>
-        <Select
-          value={provider}
-          onChange={(e) => setProvider(e.target.value)}
-          displayEmpty
+    <Box
+      sx={{
+        position: 'relative',
+        bgcolor: theme.background.secondary,
+        border: `1px solid ${theme.border.default}`,
+        borderRadius: '16px',
+        overflow: 'hidden',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+        '&:focus-within': {
+          borderColor: theme.border.active,
+          boxShadow: `0 0 0 1px ${theme.border.active}`,
+        },
+      }}
+    >
+      {/* Input row */}
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="输入股票代码  AAPL, TSLA, 700.HK ..."
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
           sx={{
-            color: theme.text.primary,
-            bgcolor: theme.background.tertiary,
-            fontSize: 13,
-            '& fieldset': { borderColor: theme.border.default },
-            '&:hover fieldset': { borderColor: theme.border.hover },
-            '& .MuiSvgIcon-root': { color: theme.text.muted },
+            '& .MuiOutlinedInput-root': {
+              bgcolor: 'transparent',
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              color: theme.text.primary,
+              letterSpacing: '0.03em',
+              '& fieldset': { border: 'none' },
+              '&:hover fieldset': { border: 'none' },
+              '&.Mui-focused fieldset': { border: 'none' },
+            },
+            '& .MuiInputBase-input': {
+              py: 1.5,
+              px: 2,
+              '&::placeholder': {
+                color: theme.text.muted,
+                opacity: 0.5,
+                fontWeight: 400,
+                letterSpacing: '0.01em',
+              },
+            },
           }}
-        >
-          {PROVIDERS.map((p) => (
-            <MenuItem key={p.value} value={p.value} sx={{ fontSize: 13 }}>
-              {p.label}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+        />
+      </Box>
 
-      <Badge
-        badgeContent={runningCount > 0 ? runningCount : undefined}
-        color="primary"
+      {/* Bottom toolbar */}
+      <Box
         sx={{
-          '& .MuiBadge-badge': {
-            fontSize: 10,
-            height: 16,
-            minWidth: 16,
-          },
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          px: 1.5,
+          pb: 1,
         }}
       >
-        <Button
-          variant="contained"
-          onClick={handleSubmit}
-          disabled={!symbol.trim()}
-          startIcon={<Search size={16} />}
-          sx={{
-            bgcolor: theme.button.primary.bg,
-            color: theme.button.primary.text,
-            textTransform: 'none',
-            fontWeight: 600,
-            fontSize: 13,
-            px: 2.5,
-            '&:hover': { bgcolor: theme.button.primary.hover },
-            '&.Mui-disabled': { bgcolor: theme.background.hover, color: theme.text.disabled },
-          }}
-        >
-          开始分析
-        </Button>
-      </Badge>
+        {/* Left: model selector + cache clear */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <FormControl size="small">
+            <Select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              displayEmpty
+              sx={{
+                color: theme.text.muted,
+                fontSize: 12,
+                height: 28,
+                bgcolor: 'transparent',
+                '& fieldset': { border: 'none' },
+                '&:hover': { color: theme.text.secondary },
+                '& .MuiSvgIcon-root': { color: theme.text.disabled, fontSize: 16 },
+                '& .MuiSelect-select': { py: 0.25, pl: 1, pr: 3 },
+              }}
+            >
+              {MODEL_OPTIONS.map((p) => (
+                <MenuItem key={p.value} value={p.value} sx={{ fontSize: 12 }}>
+                  {p.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-      {symbol.trim() && (
-        <Button
-          size="small"
-          onClick={handleClearCache}
-          startIcon={<Trash2 size={14} />}
-          sx={{
-            color: theme.text.muted,
-            textTransform: 'none',
-            fontSize: 12,
-            '&:hover': { color: theme.status.warning },
-          }}
-        >
-          清除缓存
-        </Button>
-      )}
+          {hasSymbol && (
+            <Box
+              onClick={handleClearCache}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.4,
+                px: 1,
+                py: 0.25,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.7rem',
+                color: theme.text.disabled,
+                transition: 'all 0.15s',
+                '&:hover': { color: theme.status.warning, bgcolor: `${theme.status.warning}10` },
+              }}
+            >
+              <Trash2 size={11} />
+              <span>清缓存</span>
+            </Box>
+          )}
+        </Box>
 
-      {runningCount > 0 && elapsedMs > 0 && (
-        <Typography sx={{ fontSize: 13, color: theme.text.muted, fontFamily: 'monospace' }}>
-          {formatTime(elapsedMs)}
-        </Typography>
-      )}
+        {/* Right: running badge + submit */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          {runningCount > 0 && (
+            <Typography sx={{
+              fontSize: 11,
+              color: theme.brand.primary,
+              fontWeight: 500,
+              px: 1,
+              py: 0.25,
+              borderRadius: '8px',
+              bgcolor: `${theme.brand.primary}10`,
+            }}>
+              {runningCount} running
+            </Typography>
+          )}
+
+          <IconButton
+            onClick={handleSubmit}
+            disabled={!hasSymbol}
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: '10px',
+              bgcolor: hasSymbol ? theme.brand.primary : 'transparent',
+              color: hasSymbol ? '#fff' : theme.text.disabled,
+              transition: 'all 0.2s',
+              '&:hover': {
+                bgcolor: hasSymbol ? theme.brand.hover : 'transparent',
+              },
+              '&.Mui-disabled': { color: theme.text.disabled },
+            }}
+          >
+            <ArrowRight size={16} />
+          </IconButton>
+        </Box>
+      </Box>
     </Box>
   );
 }

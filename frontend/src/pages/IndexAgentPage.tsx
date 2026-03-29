@@ -12,18 +12,18 @@ import LLMBacktestPanel from '../components/index/LLMBacktestPanel';
 import EvaluationPanel from '../components/index/EvaluationPanel';
 
 const tabs = [
-  { label: 'Arena', icon: <ArenaIcon size={18} /> },
-  { label: 'Watchlist', icon: <WatchlistIcon size={18} /> },
-  { label: 'History', icon: <TimelineIcon size={18} /> },
-  { label: 'Leaderboard', icon: <LeaderboardIcon size={18} /> },
-  { label: 'LLM Backtest', icon: <LLMBacktestIcon size={18} /> },
-  { label: 'DCA Backtest', icon: <BacktestIcon size={18} /> },
-  { label: 'Evaluation', icon: <EvaluationIcon size={18} /> },
-  { label: 'Settings', icon: <SettingsIcon size={18} /> },
+  { label: 'Arena', icon: <ArenaIcon size={15} /> },
+  { label: 'Watchlist', icon: <WatchlistIcon size={15} /> },
+  { label: 'History', icon: <TimelineIcon size={15} /> },
+  { label: 'Leaderboard', icon: <LeaderboardIcon size={15} /> },
+  { label: 'LLM Backtest', icon: <LLMBacktestIcon size={15} /> },
+  { label: 'DCA Backtest', icon: <BacktestIcon size={15} /> },
+  { label: 'Evaluation', icon: <EvaluationIcon size={15} /> },
+  { label: 'Settings', icon: <SettingsIcon size={15} /> },
 ];
 
 export default function IndexAgentPage() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState(0);
 
   return (
@@ -39,40 +39,47 @@ export default function IndexAgentPage() {
         overflow: 'hidden',
       }}
     >
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          px: 3,
-          pt: 3,
-          pb: 1.5,
-        }}
-      >
-        <Typography sx={{ fontSize: 24, fontWeight: 600 }}>
-          Index Investment Agent
-        </Typography>
-      </Box>
-
-      {/* Tabs */}
-      <Box sx={{ px: 3, borderBottom: `1px solid ${theme.border.subtle}` }}>
+      {/* Tabs — integrated into the top, no separate header */}
+      <Box sx={{
+        px: 2,
+        borderBottom: `1px solid ${theme.border.subtle}`,
+        display: 'flex',
+        alignItems: 'flex-end',
+      }}>
         <Tabs
           value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
           sx={{
-            minHeight: 40,
+            minHeight: 38,
             '& .MuiTab-root': {
               color: theme.text.muted,
               textTransform: 'none',
-              fontWeight: 600,
-              fontSize: 13,
-              minHeight: 40,
+              fontWeight: 500,
+              fontSize: 12.5,
+              minHeight: 38,
               py: 0,
+              px: 1.5,
               gap: 0.5,
+              opacity: 0.7,
+              transition: 'opacity 0.15s',
+              '&:hover': { opacity: 1 },
             },
-            '& .Mui-selected': { color: theme.brand.primary },
-            '& .MuiTabs-indicator': { bgcolor: theme.brand.primary },
+            '& .Mui-selected': {
+              color: `${theme.text.primary} !important`,
+              fontWeight: 600,
+              opacity: 1,
+            },
+            '& .MuiTabs-indicator': {
+              bgcolor: theme.brand.primary,
+              height: 2,
+              borderRadius: '2px 2px 0 0',
+            },
+            '& .MuiTabs-scrollButtons': {
+              color: theme.text.muted,
+              '&.Mui-disabled': { opacity: 0.2 },
+            },
           }}
         >
           {tabs.map((t) => (

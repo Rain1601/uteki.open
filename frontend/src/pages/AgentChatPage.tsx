@@ -246,10 +246,48 @@ export default function AgentChatPage() {
     }
   };
 
+  // ── Intent Router: LLM-based classification ──
+  const classifyIntent = async (text: string): Promise<'research' | 'chat'> => {
+    // Quick local shortcut for obvious cases (saves an API call)
+    if (text.trim().length < 6) return 'chat';
+
+    try {
+      const context = messages.slice(-4).map((m) => ({
+        role: m.role,
+        content: m.content.slice(0, 200),
+      }));
+
+      const resp = await fetch(`${API_BASE}/api/agent/route`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          message: text,
+          conversation_context: context.length > 0 ? context : undefined,
+        }),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        return data.route === 'research' ? 'research' : 'chat';
+      }
+    } catch (e) {
+      console.warn('Intent classification failed, defaulting to chat:', e);
+    }
+    return 'chat';
+  };
+
   // 发送消息（SSE流式）
   const handleSendMessage = async () => {
     if (!message.trim() || isStreaming) return;
-    if (researchMode) return handleDeepResearchSend();
+
+    // Auto-route: when research mode is on, let the LLM decide
+    if (researchMode) {
+      const intent = await classifyIntent(message);
+      if (intent === 'research') {
+        return handleDeepResearchSend();
+      }
+      // else: fall through to regular chat
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),

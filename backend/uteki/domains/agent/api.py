@@ -39,6 +39,90 @@ chat_svc = get_chat_service()
 
 
 # ============================================================================
+# Intent Router — LLM-based classification for research vs chat
+# ============================================================================
+
+
+class IntentRouteRequest(BaseModel):
+    message: str
+    conversation_context: Optional[list] = None  # recent messages for context
+
+
+class IntentRouteResponse(BaseModel):
+    route: str  # "research" or "chat"
+    reason: str
+
+
+_ROUTER_PROMPT = """You are an intent classifier. Given a user message and optional conversation context, decide whether the message needs web research or can be answered directly.
+
+Output ONLY a JSON object: {"route": "research" or "chat", "reason": "brief reason"}
+
+Rules:
+- "research": questions needing current/factual information from the web (stock prices, recent events, company analysis, market data, comparisons requiring up-to-date info, "what happened", "latest news", etc.)
+- "chat": greetings, follow-up questions in an ongoing conversation, creative tasks (writing, coding), opinion questions, explanations of concepts, translations, simple factual questions the model already knows, meta questions about the AI itself
+
+Examples:
+- "你好" → {"route": "chat", "reason": "greeting"}
+- "帮我写一个排序算法" → {"route": "chat", "reason": "coding task"}
+- "那具体怎么实现？" → {"route": "chat", "reason": "follow-up"}
+- "阿里巴巴最近的股价怎么样" → {"route": "research", "reason": "current stock data needed"}
+- "比较特斯拉和比亚迪的市场份额" → {"route": "research", "reason": "current market data comparison"}
+- "2024年美联储加息了几次" → {"route": "research", "reason": "specific factual data needed"}
+- "什么是量化宽松" → {"route": "chat", "reason": "concept explanation"}"""
+
+
+@router.post("/route", response_model=IntentRouteResponse)
+async def route_intent(req: IntentRouteRequest):
+    """Classify user intent: research vs chat. Uses a fast/cheap model."""
+    from uteki.domains.agent.llm_adapter import LLMConfig, LLMMessage
+
+    # Build context
+    user_content = req.message
+    if req.conversation_context:
+        recent = req.conversation_context[-4:]  # last 2 turns
+        ctx_lines = []
+        for m in recent:
+            role = m.get("role", "user")
+            content = m.get("content", "")[:200]
+            ctx_lines.append(f"{role}: {content}")
+        user_content = "Conversation context:\n" + "\n".join(ctx_lines) + f"\n\nNew message: {req.message}"
+
+    try:
+        from openai import AsyncOpenAI
+        aihub_key = getattr(settings, "aihubmix_api_key", None)
+        aihub_url = getattr(settings, "aihubmix_base_url", None) or "https://aihubmix.com/v1"
+
+        if not aihub_key:
+            return IntentRouteResponse(route="chat", reason="no api key")
+
+        client = AsyncOpenAI(api_key=aihub_key, base_url=aihub_url)
+        resp = await client.chat.completions.create(
+            model="gpt-4.1-nano",  # fastest + cheapest
+            messages=[
+                {"role": "system", "content": _ROUTER_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            max_tokens=80,
+            temperature=0,
+        )
+
+        result = resp.choices[0].message.content or ""
+        import re
+        json_match = re.search(r'\{[^}]+\}', result)
+        if json_match:
+            data = json.loads(json_match.group(0))
+            return IntentRouteResponse(
+                route=data.get("route", "chat"),
+                reason=data.get("reason", ""),
+            )
+    except Exception as e:
+        logger.warning(f"[route] intent classification failed: {e}")
+
+    # Fallback: chat (safer default)
+    return IntentRouteResponse(route="chat", reason="fallback")
+
+
+# ============================================================================
 # Conversation Routes
 # ============================================================================
 

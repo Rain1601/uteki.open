@@ -27,7 +27,6 @@ import {
   LayoutDashboard,
   Building2,
 
-  Gauge,
   User,
 } from 'lucide-react';
 import { useTheme } from '../theme/ThemeProvider';
@@ -76,7 +75,6 @@ const menuItems: MenuCategory[] = [
   {
     category: 'AGENT',
     items: [
-      { text: 'Agent 总览', icon: <Gauge size={ICON_SIZE} strokeWidth={ICON_STROKE} />, path: '/agent-dashboard' },
       { text: '指数投资', icon: <LineChart size={ICON_SIZE} strokeWidth={ICON_STROKE} />, path: '/index-agent' },
       { text: '公司投资', icon: <Building2 size={ICON_SIZE} strokeWidth={ICON_STROKE} />, path: '/company-agent' },
 

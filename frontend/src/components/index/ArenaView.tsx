@@ -333,26 +333,27 @@ export default function ArenaView() {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* ── Top Controls ── */}
-      <Box sx={{ display: 'flex', alignItems: 'center', px: 3, py: 1, flexShrink: 0, borderBottom: `1px solid ${theme.border.subtle}`, gap: 1.5, minHeight: 48 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 3, py: 1, flexShrink: 0, borderBottom: `1px solid ${theme.border.subtle}`, gap: 2, minHeight: 48 }}>
         {[
           { label: 'Total', value: account?.total, bold: true },
           { label: 'Cash', value: account?.cash },
           { label: 'Positions', value: account?.positions_value },
         ].map(({ label, value, bold }) => (
           <Box key={label} sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-            <Typography sx={{ fontSize: 11, color: theme.text.muted }}>{label}</Typography>
+            <Typography sx={{ fontSize: 10, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</Typography>
             <Typography sx={{
-              fontSize: 13,
+              fontSize: bold ? 15 : 13,
               fontWeight: bold ? 700 : 500,
               color: bold ? theme.text.primary : theme.text.secondary,
               fontFeatureSettings: '"tnum"',
+              fontFamily: '"JetBrains Mono", "SF Mono", monospace',
             }}>
               {value != null ? `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
             </Typography>
           </Box>
         ))}
 
-        <Box sx={{ width: '1px', height: 20, bgcolor: theme.border.subtle, mx: 0.5 }} />
+        <Box sx={{ flex: 1 }} />
 
         <TextField
           size="small"
@@ -452,14 +453,34 @@ export default function ArenaView() {
             <>
               {/* Phase progress banner */}
               {phaseProgress && (
-                <Box sx={{ mb: 1.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.secondary }}>
-                      {phaseProgress.phase === 'decide' ? 'Phase 1/3: Decisions'
-                        : phaseProgress.phase === 'vote' ? 'Phase 2/3: Voting'
-                        : 'Phase 3/3: Tally'}
-                    </Typography>
-                    <Typography sx={{ fontSize: 11, color: theme.text.muted }}>
+                <Box sx={{
+                  mb: 1.5,
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: '12px',
+                  bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                  border: `1px solid ${theme.border.subtle}`,
+                }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {[
+                        { key: 'decide', label: 'Decide', num: 1 },
+                        { key: 'vote', label: 'Vote', num: 2 },
+                        { key: 'tally', label: 'Tally', num: 3 },
+                      ].map((p, i) => (
+                        <Box key={p.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {i > 0 && <Box sx={{ width: 12, height: 1, bgcolor: theme.border.subtle }} />}
+                          <Typography sx={{
+                            fontSize: 11,
+                            fontWeight: phaseProgress.phase === p.key ? 700 : 400,
+                            color: phaseProgress.phase === p.key ? theme.brand.primary : theme.text.muted,
+                          }}>
+                            {p.num}. {p.label}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                    <Typography sx={{ fontSize: 11, color: theme.text.muted, fontFeatureSettings: '"tnum"' }}>
                       {phaseProgress.completedModels}/{phaseProgress.totalModels}
                     </Typography>
                   </Box>
@@ -469,16 +490,19 @@ export default function ArenaView() {
                       ? (phaseProgress.completedModels / phaseProgress.totalModels) * 100
                       : 0}
                     sx={{
-                      height: 3,
+                      height: 2,
                       borderRadius: 1,
-                      bgcolor: 'rgba(128,128,128,0.1)',
-                      '& .MuiLinearProgress-bar': { bgcolor: theme.brand.primary },
+                      bgcolor: 'rgba(128,128,128,0.08)',
+                      '& .MuiLinearProgress-bar': {
+                        bgcolor: theme.brand.primary,
+                        borderRadius: 1,
+                      },
                     }}
                   />
                 </Box>
               )}
 
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                 {knownModels.map((m) => {
                   const key = `${m.provider}:${m.name}`;
                   const progress = modelProgress[key];
@@ -500,14 +524,26 @@ export default function ArenaView() {
 
           {/* No data empty state */}
           {!running && !hasData && !selectedHarnessId && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1 }}>
-              <Typography sx={{ fontSize: 16, fontWeight: 600, color: theme.text.muted }}>
-                Multi-Model Arena
-              </Typography>
-              <Typography sx={{ fontSize: 13, color: theme.text.muted, textAlign: 'center', maxWidth: 480 }}>
-                Arena 将同一份市场数据快照（Decision Harness）同时发送给多个 LLM，
-                让它们独立给出投资建议，方便你对比不同模型的分析能力和决策质量。
-              </Typography>
+            <Box sx={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              height: '100%', gap: 2, px: 3,
+            }}>
+              <Box sx={{
+                width: 48, height: 48, borderRadius: '14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                bgcolor: `${theme.brand.primary}12`,
+                border: `1px solid ${theme.brand.primary}20`,
+              }}>
+                <Play size={22} style={{ color: theme.brand.primary, marginLeft: 2 }} />
+              </Box>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography sx={{ fontSize: 15, fontWeight: 600, color: theme.text.primary, mb: 0.5 }}>
+                  Multi-Model Arena
+                </Typography>
+                <Typography sx={{ fontSize: 12, color: theme.text.muted, maxWidth: 360, lineHeight: 1.6 }}>
+                  将同一份市场快照发送给多个 LLM，独立分析后投票选出最优决策
+                </Typography>
+              </Box>
             </Box>
           )}
 
@@ -550,28 +586,57 @@ export default function ArenaView() {
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {/* Final decision banner */}
-                  {finalDecision && (
-                    <Box sx={{
-                      display: 'flex', alignItems: 'center', gap: 1, py: 0.8, px: 1,
-                      bgcolor: 'rgba(76,175,80,0.08)', borderRadius: 1, mb: 0.5,
-                    }}>
-                      <Typography sx={{ fontSize: 11, color: '#4caf50', fontWeight: 600 }}>
-                        Winner: {finalDecision.winner_model_name}
-                      </Typography>
-                      <Chip
-                        label={finalDecision.winner_action}
-                        size="small"
-                        sx={{
-                          fontSize: 9, height: 16, fontWeight: 600,
-                          bgcolor: finalDecision.winner_action === 'BUY' ? 'rgba(76,175,80,0.15)' : finalDecision.winner_action === 'SELL' ? 'rgba(244,67,54,0.15)' : 'rgba(255,152,0,0.15)',
-                          color: finalDecision.winner_action === 'BUY' ? '#4caf50' : finalDecision.winner_action === 'SELL' ? '#f44336' : '#ff9800',
-                        }}
-                      />
-                      <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
-                        +{finalDecision.total_approve}/-{finalDecision.total_reject} (net:{finalDecision.net_score})
-                      </Typography>
-                    </Box>
-                  )}
+                  {finalDecision && (() => {
+                    const actionColors: Record<string, { bg: string; text: string; border: string }> = {
+                      BUY:  { bg: 'rgba(76,175,80,0.06)', text: '#4caf50', border: 'rgba(76,175,80,0.2)' },
+                      SELL: { bg: 'rgba(244,67,54,0.06)', text: '#f44336', border: 'rgba(244,67,54,0.2)' },
+                      HOLD: { bg: 'rgba(255,152,0,0.06)', text: '#ff9800', border: 'rgba(255,152,0,0.2)' },
+                    };
+                    const ac = actionColors[finalDecision.winner_action] || actionColors.HOLD;
+                    return (
+                      <Box sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        py: 1, px: 1.5,
+                        bgcolor: ac.bg, borderRadius: '12px', mb: 1,
+                        border: `1px solid ${ac.border}`,
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography sx={{
+                            fontSize: 18, fontWeight: 700, color: ac.text,
+                            letterSpacing: '0.05em',
+                          }}>
+                            {finalDecision.winner_action}
+                          </Typography>
+                          <Box>
+                            <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.primary, lineHeight: 1.2 }}>
+                              {finalDecision.winner_model_name}
+                            </Typography>
+                            <Typography sx={{ fontSize: 10, color: theme.text.muted, lineHeight: 1.2 }}>
+                              Consensus winner
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#4caf50', lineHeight: 1 }}>
+                              {finalDecision.total_approve}
+                            </Typography>
+                            <Typography sx={{ fontSize: 8, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              approve
+                            </Typography>
+                          </Box>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#f44336', lineHeight: 1 }}>
+                              {finalDecision.total_reject}
+                            </Typography>
+                            <Typography sx={{ fontSize: 8, color: theme.text.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              reject
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    );
+                  })()}
 
                   {/* Allocation Bar Chart */}
                   {(() => {
@@ -614,7 +679,7 @@ export default function ArenaView() {
   );
 }
 
-/* ── Progress Model Card (during run) ── */
+/* ── Progress Model Card (during run) — compact, single-row design ── */
 function ProgressModelCard({
   provider,
   modelName,
@@ -630,103 +695,117 @@ function ProgressModelCard({
   isDark: boolean;
   elapsedSeconds: number;
 }) {
-  const isRunning = progress?.status === 'running';
   const isDone = progress?.status === 'done';
   const isError = progress?.status === 'error';
+  const completedCount = progress?.completedSkills?.length ?? 0;
+  const totalSteps = SKILL_ORDER.length;
+  const progressPct = (completedCount / totalSteps) * 100;
+  const currentLabel = progress?.currentSkill ? SKILL_LABELS[progress.currentSkill] : null;
 
   return (
     <Box sx={{
-      borderBottom: `1px solid ${theme.border.subtle}`,
-      pb: 1,
-      opacity: isDone || isError ? 0.7 : 1,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 1.5,
+      py: 0.75,
+      px: 1,
+      borderRadius: '10px',
+      bgcolor: isDone
+        ? 'rgba(76,175,80,0.04)'
+        : isError
+          ? 'rgba(244,67,54,0.04)'
+          : 'transparent',
+      transition: 'background-color 0.3s',
     }}>
-      {/* Header */}
-      <Box sx={{ py: 0.8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ModelLogo provider={provider} size={18} isDark={isDark} />
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: theme.text.primary }}>
-            {modelName}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {isDone && (
-            <CheckCircle2 size={14} style={{ color: '#4caf50' }} />
-          )}
-          {isError && (
-            <AlertCircle size={14} style={{ color: '#f44336' }} />
-          )}
-          {!isDone && !isError && (
-            <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
-              {elapsedSeconds}s
-            </Typography>
-          )}
-          {progress?.latency != null && (
-            <Typography sx={{ fontSize: 10, color: theme.text.muted }}>
-              {(progress.latency / 1000).toFixed(1)}s
-            </Typography>
-          )}
-          {progress?.parseStatus && (
-            <Chip
-              label={progress.parseStatus}
-              size="small"
-              sx={{
-                fontSize: 8, height: 16,
-                bgcolor: progress.parseStatus === 'structured' ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)',
-                color: progress.parseStatus === 'structured' ? '#4caf50' : '#ff9800',
-              }}
-            />
-          )}
-        </Box>
+      {/* Model identity */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 140, flexShrink: 0 }}>
+        <ModelLogo provider={provider} size={20} isDark={isDark} />
+        <Typography sx={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: theme.text.primary,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {modelName.replace(/^(.*?\/)?/, '').slice(0, 24)}
+        </Typography>
       </Box>
 
-      {/* Skill progress steps */}
-      <Box sx={{ display: 'flex', gap: 0.5, py: 0.3 }}>
-        {SKILL_ORDER.map((skill) => {
-          const isCompleted = progress?.completedSkills.includes(skill);
-          const isCurrent = progress?.currentSkill === skill;
-
-          return (
-            <Box
-              key={skill}
-              sx={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.3,
-                py: 0.3,
-                px: 0.5,
-                borderRadius: 0.5,
-                bgcolor: isCompleted
-                  ? 'rgba(76,175,80,0.08)'
-                  : isCurrent
-                    ? 'rgba(33,150,243,0.08)'
-                    : 'rgba(128,128,128,0.04)',
-                border: isCurrent ? '1px solid rgba(33,150,243,0.3)' : '1px solid transparent',
-              }}
-            >
-              <Typography sx={{
-                fontSize: 9,
-                color: isCompleted ? '#4caf50' : isCurrent ? '#2196f3' : theme.text.muted,
-                fontWeight: isCurrent ? 600 : 400,
-              }}>
-                {isCompleted ? '✓' : isCurrent ? '⏳' : '○'} {SKILL_LABELS[skill] || skill}
-              </Typography>
-            </Box>
-          );
-        })}
+      {/* Progress bar — replaces 4 separate boxes */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        {isDone || isError ? (
+          <Box sx={{
+            height: 4,
+            borderRadius: 2,
+            bgcolor: isDone ? 'rgba(76,175,80,0.25)' : 'rgba(244,67,54,0.25)',
+          }} />
+        ) : (
+          <Box sx={{ position: 'relative', height: 4, borderRadius: 2, bgcolor: 'rgba(128,128,128,0.08)' }}>
+            <Box sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: '100%',
+              width: `${progressPct}%`,
+              borderRadius: 2,
+              bgcolor: theme.brand.primary,
+              transition: 'width 0.5s ease-out',
+            }} />
+            {/* Pulse dot at progress edge */}
+            {progressPct > 0 && progressPct < 100 && (
+              <Box sx={{
+                position: 'absolute',
+                top: -2,
+                left: `${progressPct}%`,
+                transform: 'translateX(-4px)',
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                bgcolor: theme.brand.primary,
+                animation: 'pulse 1.5s ease-in-out infinite',
+                '@keyframes pulse': {
+                  '0%, 100%': { opacity: 1, transform: 'translateX(-4px) scale(1)' },
+                  '50%': { opacity: 0.5, transform: 'translateX(-4px) scale(1.4)' },
+                },
+              }} />
+            )}
+          </Box>
+        )}
       </Box>
 
-      {/* Current skill indicator */}
-      {isRunning && !progress?.currentSkill && !isDone && (
-        <LinearProgress
-          sx={{
-            height: 2,
-            borderRadius: 1,
-            mt: 0.5,
-            bgcolor: 'rgba(128,128,128,0.05)',
-            '& .MuiLinearProgress-bar': { bgcolor: theme.brand.primary },
-          }}
-        />
+      {/* Current step label */}
+      <Typography sx={{
+        fontSize: 10,
+        color: isDone ? '#4caf50' : isError ? '#f44336' : theme.brand.primary,
+        fontWeight: 500,
+        minWidth: 56,
+        textAlign: 'center',
+        opacity: 0.8,
+      }}>
+        {isDone ? 'Done' : isError ? 'Error' : currentLabel || 'Starting...'}
+      </Typography>
+
+      {/* Time */}
+      <Typography sx={{
+        fontSize: 10,
+        color: theme.text.muted,
+        minWidth: 32,
+        textAlign: 'right',
+        fontFeatureSettings: '"tnum"',
+      }}>
+        {progress?.latency != null ? `${(progress.latency / 1000).toFixed(1)}s` : isDone || isError ? '' : `${elapsedSeconds}s`}
+      </Typography>
+
+      {/* Status badge */}
+      {progress?.parseStatus && (
+        <Box sx={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          bgcolor: progress.parseStatus === 'structured' ? '#4caf50' : '#ff9800',
+          flexShrink: 0,
+        }} />
       )}
     </Box>
   );
