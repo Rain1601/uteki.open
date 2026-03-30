@@ -36,7 +36,7 @@ ARENA_MODELS = [
     {"provider": "deepseek", "model": "deepseek-chat", "api_key_attr": "deepseek_api_key"},
     {"provider": "google", "model": "gemini-2.5-pro-thinking", "api_key_attr": "google_api_key"},
     {"provider": "qwen", "model": "qwen-plus", "api_key_attr": "dashscope_api_key"},
-    {"provider": "minimax", "model": "MiniMax-Text-01", "api_key_attr": "minimax_api_key"},
+    {"provider": "minimax", "model": "MiniMax-M2.7", "api_key_attr": "minimax_api_key"},
     {"provider": "doubao", "model": "doubao-seed-2-0-pro-260215", "api_key_attr": "doubao_api_key"},
 ]
 

@@ -321,7 +321,7 @@ export default function CompanyAgentPage() {
           display: 'grid',
           gridTemplateColumns: compact
             ? '48px 1fr 44px 36px'
-            : '48px 1fr 20px 48px 44px 56px 48px 40px',
+            : '48px minmax(60px,1fr) 20px 48px 44px 56px 48px 40px',
           alignItems: 'center',
           px: compact ? 1 : 1.5,
           minHeight: compact ? 34 : 38,
@@ -594,9 +594,9 @@ export default function CompanyAgentPage() {
         ) : (
           /* ═══ LAYOUT A: List mode — Watchlist | Chart | Screener ═══ */
           <>
-            {/* Left 20%: Watchlist (unique symbols) */}
+            {/* Left 10%: Watchlist */}
             <Box sx={{
-              width: '20%', flexShrink: 0,
+              width: '10%', flexShrink: 0,
               borderRight: `1px solid ${theme.border.subtle}`,
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
             }}>
@@ -655,9 +655,9 @@ export default function CompanyAgentPage() {
               </Box>
             </Box>
 
-            {/* Center 40%: K-line Chart */}
+            {/* Center 45%: K-line Chart */}
             <Box sx={{
-              width: '40%', flexShrink: 0,
+              width: '45%', flexShrink: 0,
               borderRight: `1px solid ${theme.border.subtle}`,
               position: 'relative',
             }}>
@@ -670,13 +670,13 @@ export default function CompanyAgentPage() {
               )}
             </Box>
 
-            {/* Right 40%: Analysis records */}
-            <Box sx={{ width: '40%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Right 45%: Analysis records */}
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* Column headers */}
               {filteredAnalyses.length > 0 && (
                 <Box sx={{
                   display: 'grid',
-                  gridTemplateColumns: '48px 1fr 20px 48px 44px 56px 48px 40px',
+                  gridTemplateColumns: '48px minmax(60px,1fr) 20px 48px 44px 56px 48px 40px',
                   alignItems: 'center',
                   py: 0.5, px: 1,
                   borderBottom: `1px solid ${theme.border.subtle}`,
