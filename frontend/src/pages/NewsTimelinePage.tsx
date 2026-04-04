@@ -765,7 +765,7 @@ export default function NewsTimelinePage() {
                   key={index}
                   onClick={() => selectDate(dayData.date)}
                   sx={{
-                    py: 0.5,
+                    aspectRatio: '1',
                     bgcolor: isSelected ? `${theme.brand.primary}20` : densityBg,
                     border: `1px solid ${isSelected ? `${theme.brand.primary}40` : hasCritical ? 'rgba(244, 67, 54, 0.5)' : 'transparent'}`,
                     borderRadius: '4px',
