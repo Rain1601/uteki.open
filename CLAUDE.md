@@ -34,6 +34,8 @@ docker-compose up           # Same, manual
 ./scripts/verify_system.sh  # Health check all services
 ```
 
+Docker services: PostgreSQL 17+TimescaleDB (:5432), ClickHouse (:8123/:9000), Redis 7 (:6379), Qdrant v1.11 (:6333), MinIO (:9000/:9001). All on `uteki-network`.
+
 ## Architecture
 
 **Monorepo**: `backend/` (FastAPI/Python), `frontend/` (React/TS/Vite), `mobile/` (Flutter)
@@ -72,6 +74,12 @@ Sessions: `async with db_manager.get_postgres_session() as session:` — auto-co
 
 **Singleton Services**: Pattern is `_service: Optional[T] = None` + `get_service()` function.
 
+**Cache Service** (`common/cache.py`): Redis primary + in-memory fallback. Key pattern: `key:domain:operation:params`. Global `get_cache_service()` singleton. Supports `get_or_set()` for cache-aside.
+
+**Schedulers** (`schedulers/`): APScheduler-based background jobs — news collection (CNBC/Bloomberg), index price updates, data collection. Started in `main_dev.py` lifespan event.
+
+**Evaluation Domain** (`domains/evaluation/`): Pipeline consistency testing — runs the Company Agent N times and measures output stability (action agreement, conviction stats, gate score variance). Uses `EvaluationRun` and `EvaluationGateScore` models with JSON storage for runs/metrics.
+
 ### Frontend Structure
 
 - `src/pages/` — route-level components (`/admin`, `/agent`, `/dashboard`, etc.)
@@ -83,10 +91,18 @@ Sessions: `async with db_manager.get_postgres_session() as session:` — auto-co
 - UI: MUI 6 + TailwindCSS + Framer Motion
 - Charts: ECharts, Recharts, Lightweight Charts
 
+### Auth Flow
+
+Frontend login redirects to backend OAuth endpoint (GitHub/Google/Apple). Backend returns token in URL hash. Frontend extracts token → localStorage → `Authorization: Bearer` header on subsequent requests.
+
 ### Dev vs Prod Entry Points
 
-- `main_dev.py`: All routes including Admin API. Use for local development.
+- `main_dev.py`: All routes + Admin API + schedulers. Use for local development.
 - `main.py`: Production — health check + limited routes. Agent/Admin APIs disabled (Cloud Run startup timeout).
+
+### CI/CD
+
+GitHub Actions (`.github/workflows/deploy.yml`): push to main → Docker build → Google Artifact Registry → Cloud Run. Backend: 2 CPU, 1GB RAM, max 10 instances. Frontend: 1 CPU, 256MB.
 
 ## Important Gotchas
 
