@@ -19,6 +19,9 @@ class ToolAction:
     tool_args: dict
     result: str
     round_num: int
+    search_query: str = ""          # actual search query (for web_search)
+    result_length: int = 0          # chars returned by tool
+    used_in_conclusion: bool = False # can be filled by Judge later
 
 
 @dataclass
@@ -36,6 +39,7 @@ class GateResult:
     latency_ms: int = 0
     parse_status: str = "text"
     error: Optional[str] = None
+    tool_efficiency_score: Optional[float] = None  # ratio of useful tool calls
 
     @property
     def summary(self) -> str:

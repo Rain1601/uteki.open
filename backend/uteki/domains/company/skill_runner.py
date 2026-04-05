@@ -347,6 +347,7 @@ class GateExecutor:
             conclusion = self.tool_parser.parse_conclusion(raw)
             if conclusion:
                 latency = int((time.time() - start_time) * 1000)
+                eff = round(sum(1 for a in actions if a.result_length > 100) / len(actions), 2) if actions else None
                 return GateResult(
                     gate_number=skill.gate_number,
                     skill_name=skill.skill_name,
@@ -359,6 +360,7 @@ class GateExecutor:
                     rounds=budget.rounds_used,
                     latency_ms=latency,
                     parse_status="text",
+                    tool_efficiency_score=eff,
                 )
 
             # Check for tool call
@@ -420,6 +422,8 @@ class GateExecutor:
                 tool_args=tool_call.arguments,
                 result=tool_result[:500],
                 round_num=budget.rounds_used,
+                search_query=tool_call.arguments.get("query", ""),
+                result_length=len(tool_result),
             ))
 
             # Append conversation turn and continue
@@ -484,6 +488,7 @@ class GateExecutor:
         core_conclusion = self._extract_core_conclusion(full_raw)
         key_findings = self._extract_key_findings(full_raw)
         confidence = self._extract_confidence(full_raw)
+        eff = round(sum(1 for a in actions if a.result_length > 100) / len(actions), 2) if actions else None
 
         return GateResult(
             gate_number=skill.gate_number,
@@ -497,6 +502,7 @@ class GateExecutor:
             rounds=budget.rounds_used,
             latency_ms=latency,
             parse_status="text",
+            tool_efficiency_score=eff,
         )
 
     async def _execute_gate7(
