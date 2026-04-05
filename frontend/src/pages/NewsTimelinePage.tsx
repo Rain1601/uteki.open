@@ -760,58 +760,48 @@ export default function NewsTimelinePage() {
                     ? `${theme.brand.primary}15`
                     : `${theme.brand.primary}25`; // High density (5+ articles)
 
+              // Clean dot color based on density
+              const dotColor = hasCritical ? '#ef4444' : density >= 3 ? theme.brand.primary : `${theme.brand.primary}90`;
+
               return (
                 <Box
                   key={index}
                   onClick={() => selectDate(dayData.date)}
                   sx={{
-                    py: 0.6,
-                    bgcolor: isSelected ? `${theme.brand.primary}20` : densityBg,
-                    border: `1px solid ${isSelected ? `${theme.brand.primary}40` : hasCritical ? 'rgba(244, 67, 54, 0.5)' : 'transparent'}`,
-                    borderRadius: '4px',
+                    aspectRatio: '1',
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    transition: 'background-color 0.15s ease, border-color 0.15s ease',
                     position: 'relative',
-                    opacity: dayData.isOtherMonth ? 0.3 : 1,
+                    borderRadius: '50%',
+                    transition: 'background-color 0.15s ease',
+                    bgcolor: isSelected ? theme.brand.primary : 'transparent',
+                    opacity: dayData.isOtherMonth ? 0.25 : 1,
                     '&:hover': {
-                      bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                      borderColor: theme.border.hover,
+                      bgcolor: isSelected ? theme.brand.primary : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'),
                     },
-                    // News indicator dot at bottom
-                    '&::after': hasNewsData ? {
-                      content: '""',
-                      position: 'absolute',
-                      bottom: 4,
-                      width: density >= 3 ? 6 : 4,
-                      height: density >= 3 ? 6 : 4,
-                      bgcolor: hasCritical ? '#f44336' : theme.brand.primary,
-                      borderRadius: '50%',
-                      boxShadow: hasCritical ? '0 0 4px rgba(244, 67, 54, 0.5)' : undefined,
-                    } : undefined,
-                    // Critical news accent - red left border
-                    ...(hasCritical && !dayData.isOtherMonth ? {
-                      borderLeft: '3px solid #f44336',
-                    } : {}),
                   }}
                 >
-                  <Typography sx={{ fontSize: 14, color: theme.text.secondary, fontWeight: 500 }}>
+                  <Typography sx={{
+                    fontSize: 13,
+                    fontWeight: isSelected ? 700 : hasNewsData ? 600 : 400,
+                    color: isSelected ? '#fff' : hasNewsData ? theme.text.primary : theme.text.muted,
+                    fontFamily: 'var(--font-ui)',
+                    lineHeight: 1,
+                  }}>
                     {dayData.day}
                   </Typography>
-                  {newsCount > 0 && (
-                    <Typography
-                      sx={{
-                        fontSize: 10,
-                        color: hasCritical ? '#f44336' : theme.brand.primary,
-                        mt: 0.25,
-                        fontWeight: density >= 3 ? 600 : 400,
-                      }}
-                    >
-                      {newsCount}
-                    </Typography>
+                  {/* Dot indicator */}
+                  {hasNewsData && !isSelected && (
+                    <Box sx={{
+                      position: 'absolute',
+                      bottom: 2,
+                      width: 4,
+                      height: 4,
+                      borderRadius: '50%',
+                      bgcolor: dotColor,
+                    }} />
                   )}
                 </Box>
               );
