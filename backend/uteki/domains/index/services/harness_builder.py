@@ -156,7 +156,11 @@ class HarnessBuilder:
             agent_config = await self._get_agent_config(user_id)
             budget = agent_config.get("monthly_dca_budget")
 
-        # 4. 记忆摘要
+        # 4. 记忆摘要 (auto-compress if too many)
+        try:
+            await self.memory_service.compress_if_needed(user_id)
+        except Exception as e:
+            logger.warning(f"Memory compression failed (non-fatal): {e}")
         memory_summary = await self.memory_service.get_summary(user_id)
 
         # 5. 当前 prompt 版本

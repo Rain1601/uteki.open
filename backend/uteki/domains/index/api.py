@@ -914,6 +914,7 @@ async def run_arena_stream(
             await c.delete_pattern("uteki:index:arena:")
             await c.delete_pattern("uteki:index:decisions:")
 
+            final = result.get("final_decision", {})
             queue.put_nowait({
                 "type": "result",
                 "data": {
@@ -923,10 +924,24 @@ async def run_arena_stream(
                     "prompt_version": prompt_version_str,
                     "models": result.get("model_ios", []),
                     "votes": result.get("votes", []),
-                    "final_decision": result.get("final_decision"),
+                    "final_decision": final,
                     "pipeline_phases": result.get("pipeline_phases", {}),
                 },
             })
+
+            # Notify user of arena completion
+            try:
+                from uteki.domains.notification.service import get_notification_service
+                nsvc = get_notification_service()
+                await nsvc.notify_arena_complete(
+                    user_id=_get_user_id(user),
+                    harness_id=harness["id"],
+                    winner_model=f"{final.get('winner_model_provider', '')}/{final.get('winner_model_name', '')}",
+                    winner_action=final.get("winner_action", "N/A"),
+                )
+            except Exception:
+                logger.warning("Failed to create arena notification", exc_info=True)
+
         except Exception as e:
             logger.error(f"Arena stream error: {e}")
             queue.put_nowait({"type": "error", "message": str(e)})

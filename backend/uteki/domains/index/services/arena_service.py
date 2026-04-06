@@ -26,8 +26,10 @@ from uteki.domains.index.models.prompt_version import PromptVersion
 
 logger = logging.getLogger(__name__)
 
-# 模型超时 60s
-MODEL_TIMEOUT = 60
+# 模型超时
+MODEL_TIMEOUT = 60          # first attempt
+MODEL_RETRY_TIMEOUT = 90    # retry attempt (extended)
+MAX_RETRIES = 1             # max retry count on timeout
 
 # 模型配置
 ARENA_MODELS = [
@@ -459,11 +461,15 @@ class ArenaService:
                 stored_step["error"] = str(step["error"])[:200]
             stored_steps.append(stored_step)
 
-        input_tokens = len(full_input) // 4
-        output_tokens = len(output_raw) // 4
+        # Use accumulated token counts from pipeline if available
+        pipeline_tokens = pipeline_result.get("total_usage")
+        if pipeline_tokens and pipeline_tokens.get("total_tokens", 0) > 0:
+            input_tokens = pipeline_tokens.get("input_tokens", 0)
+            output_tokens = pipeline_tokens.get("output_tokens", 0)
+        else:
+            input_tokens = len(full_input) // 4
+            output_tokens = len(output_raw) // 4
         cost = self._estimate_cost(provider_name, model_name, input_tokens, output_tokens)
-        # Pipeline has ~4 skill calls, rough cost multiplier
-        cost *= 4
 
         repo = SupabaseRepository("model_io")
         data = _ensure_id({
@@ -527,17 +533,54 @@ class ArenaService:
                     text += chunk
                 return text
 
-            output_raw = await asyncio.wait_for(
-                _collect_response(),
-                timeout=MODEL_TIMEOUT,
-            )
+            # Retry loop: attempt once at MODEL_TIMEOUT, retry once at MODEL_RETRY_TIMEOUT
+            last_timeout_error = None
+            for attempt in range(1 + MAX_RETRIES):
+                timeout = MODEL_TIMEOUT if attempt == 0 else MODEL_RETRY_TIMEOUT
+                try:
+                    attempt_start = time.time()
+                    output_raw = await asyncio.wait_for(
+                        _collect_response(),
+                        timeout=timeout,
+                    )
+                    break  # success
+                except asyncio.TimeoutError:
+                    last_timeout_error = timeout
+                    if attempt < MAX_RETRIES:
+                        logger.warning(
+                            f"Single-shot {provider_name}/{model_name}: "
+                            f"timeout {timeout}s, retrying (attempt {attempt + 2})"
+                        )
+                    continue
+            else:
+                # All attempts timed out
+                latency_ms = int((time.time() - start_time) * 1000)
+                data = _ensure_id({
+                    "harness_id": harness_id,
+                    "model_provider": provider_name,
+                    "model_name": model_name,
+                    "input_prompt": full_input,
+                    "status": "timeout",
+                    "latency_ms": latency_ms,
+                    "error_message": f"Timeout after {MAX_RETRIES + 1} attempts (last={last_timeout_error}s)",
+                })
+                result = repo.insert(data)
+                row = result.data[0] if result.data else data
+                await _backup_rows("model_io", [row], ModelIO)
+                logger.warning(f"Single-shot {provider_name}/{model_name}: all attempts timed out {latency_ms}ms")
+                return row
 
             latency_ms = int((time.time() - start_time) * 1000)
             output_structured = self._parse_structured_output(output_raw)
             parse_status = output_structured.pop("_parse_status", "raw_only")
 
-            input_tokens = len(full_input) // 4
-            output_tokens = len(output_raw) // 4
+            # Use real token counts from adapter if available, else estimate
+            if adapter.last_usage and adapter.last_usage.total_tokens > 0:
+                input_tokens = adapter.last_usage.input_tokens
+                output_tokens = adapter.last_usage.output_tokens
+            else:
+                input_tokens = len(full_input) // 4
+                output_tokens = len(output_raw) // 4
             cost = self._estimate_cost(provider_name, model_name, input_tokens, output_tokens)
 
             data = _ensure_id({
@@ -560,23 +603,6 @@ class ArenaService:
             await _backup_rows("model_io", [row], ModelIO)
 
             logger.info(f"Single-shot {provider_name}/{model_name}: {latency_ms}ms, parse={parse_status}")
-            return row
-
-        except asyncio.TimeoutError:
-            latency_ms = int((time.time() - start_time) * 1000)
-            data = _ensure_id({
-                "harness_id": harness_id,
-                "model_provider": provider_name,
-                "model_name": model_name,
-                "input_prompt": full_input,
-                "status": "timeout",
-                "latency_ms": latency_ms,
-                "error_message": f"Timeout after {MODEL_TIMEOUT}s",
-            })
-            result = repo.insert(data)
-            row = result.data[0] if result.data else data
-            await _backup_rows("model_io", [row], ModelIO)
-            logger.warning(f"Single-shot {provider_name}/{model_name}: timeout {latency_ms}ms")
             return row
 
         except Exception as e:
