@@ -9,9 +9,16 @@ import FOMCCalendarPage from './pages/FOMCCalendarPage';
 import SnbTradingPage from './pages/SnbTradingPage';
 import IndexAgentPage from './pages/IndexAgentPage';
 import CompanyAgentPage from './pages/CompanyAgentPage';
+import CompanyAgentDemoPage from './pages/CompanyAgentDemoPage';
+import CompanyAgentV2DemoPage from './pages/CompanyAgentV2DemoPage';
+import IndexAgentDemoPage from './pages/IndexAgentDemoPage';
 import ApiTestPage from './pages/ApiTestPage';
+import DashboardPage from './pages/DashboardPage';
 
 import MarketDashboardPage from './pages/MarketDashboardPage';
+import VotingDemoPage from './pages/VotingDemoPage';
+import ReflectionDemoPage from './pages/ReflectionDemoPage';
+import ModelSelectorDemoPage from './pages/ModelSelectorDemoPage';
 
 
 function App() {
@@ -20,6 +27,13 @@ function App() {
       {/* 不受保护的页面 */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/test-llm" element={<ApiTestPage />} />
+      <Route path="/demo/voting" element={<VotingDemoPage />} />
+      <Route path="/demo/reflection" element={<ReflectionDemoPage />} />
+      <Route path="/demo/model-selector" element={<ModelSelectorDemoPage />} />
+      <Route path="/demo/company-agent" element={<CompanyAgentDemoPage />} />
+      <Route path="/company-v2" element={<CompanyAgentV2DemoPage />} />
+      {/* CompanyTaskPage merged into /company-v2 */}
+      <Route path="/demo/index-agent" element={<IndexAgentDemoPage />} />
 
       {/* 受保护的路由 */}
       <Route
@@ -30,7 +44,8 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/agent" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="agent" element={<AgentChatPage />} />
         <Route path="news-timeline" element={<NewsTimelinePage />} />
@@ -38,6 +53,7 @@ function App() {
         <Route path="macro/market-dashboard" element={<MarketDashboardPage />} />
         <Route path="trading/snb" element={<SnbTradingPage />} />
 <Route path="index-agent" element={<IndexAgentPage />} />
+        <Route path="index-agent-demo" element={<IndexAgentDemoPage />} />
         <Route path="company-agent" element={<CompanyAgentPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
