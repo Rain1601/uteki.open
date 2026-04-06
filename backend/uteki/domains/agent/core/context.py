@@ -40,6 +40,7 @@ class GateResult:
     parse_status: str = "text"
     error: Optional[str] = None
     tool_efficiency_score: Optional[float] = None  # ratio of useful tool calls
+    tool_warnings: list[str] = field(default_factory=list)  # tool failure messages
 
     @property
     def summary(self) -> str:
@@ -70,8 +71,9 @@ class PipelineContext:
     - Downstream hints from reflections are injected into subsequent gates
     """
 
-    def __init__(self, company_data_text: str):
+    def __init__(self, company_data_text: str, symbol: str = ""):
         self.company_data_text = company_data_text
+        self.symbol = symbol.upper()
         self.gate_results: dict[int, GateResult] = {}
         self.reflections: list[Reflection] = []
         self.downstream_hints: list[str] = []
@@ -116,15 +118,28 @@ class PipelineContext:
 
     def _full_context(self) -> str:
         """Full raw text context for Gate 7 synthesis."""
+        failed_gates = [
+            gn for gn, r in self.gate_results.items()
+            if r.error or r.parse_status in ("timeout", "error")
+        ]
         parts = [
             "══════════════════════════════════════════",
             "以下是6位分析师的完整研究报告，请仔细阅读后进行结构化：",
             "══════════════════════════════════════════",
         ]
+        if failed_gates:
+            parts.append(
+                f"\n⚠️ 以下 Gate 执行失败或超时: {failed_gates}。"
+                f"请基于可用数据进行最终裁决，对缺失维度标注'数据不足'。"
+            )
         for gn in sorted(self.gate_results):
             r = self.gate_results[gn]
-            parts.append(f"\n───── Gate {gn}: {r.display_name} ─────")
-            parts.append(r.raw or "(no output)")
+            if r.error:
+                parts.append(f"\n───── Gate {gn}: {r.display_name} [❌ 失败: {r.error}] ─────")
+                parts.append("(此 Gate 未能完成分析)")
+            else:
+                parts.append(f"\n───── Gate {gn}: {r.display_name} ─────")
+                parts.append(r.raw or "(no output)")
 
         # Append reflection findings for Gate 7 to consider
         if self.reflections:

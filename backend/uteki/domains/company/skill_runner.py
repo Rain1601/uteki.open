@@ -258,7 +258,7 @@ class GateExecutor:
         self.tool_parser = tool_parser
         self._adapter = None
 
-    def _get_adapter(self, max_tokens: int = 8192):
+    def _get_adapter(self, max_tokens: int = 8192, json_mode: bool = False):
         provider_name = self.model_config["provider"]
         provider = _PROVIDER_MAP.get(provider_name)
         if not provider:
@@ -268,11 +268,16 @@ class GateExecutor:
         if provider_name == "google" and not base_url:
             base_url = getattr(settings, "google_api_base_url", None)
 
+        # json_mode: supported by OpenAI-compatible providers (not Anthropic)
+        use_json_mode = json_mode and provider_name != "anthropic"
+
         return LLMAdapterFactory.create_adapter(
             provider=provider,
             api_key=self.model_config["api_key"],
             model=self.model_config["model"],
-            config=LLMConfig(temperature=0, max_tokens=max_tokens),
+            config=LLMConfig(
+                temperature=0, max_tokens=max_tokens, json_mode=use_json_mode
+            ),
             base_url=base_url,
         )
 
@@ -308,6 +313,7 @@ class GateExecutor:
             LLMMessage(role="user", content=user_msg),
         ]
         actions: list[ToolAction] = []
+        tool_warnings: list[str] = []
         # Accumulate all non-tool-call text across rounds for richer output
         all_analysis_text: list[str] = []
 
@@ -361,6 +367,7 @@ class GateExecutor:
                     latency_ms=latency,
                     parse_status="text",
                     tool_efficiency_score=eff,
+                    tool_warnings=tool_warnings,
                 )
 
             # Check for tool call
@@ -411,6 +418,21 @@ class GateExecutor:
                 })
 
             tool_result = await self.tool_executor.execute(tool_call.name, tool_call.arguments)
+            tool_failed = tool_result.startswith("Error:") or tool_result.startswith("No results")
+
+            if tool_failed and on_progress:
+                on_progress({
+                    "type": "tool_warning",
+                    "gate": skill.gate_number,
+                    "skill": skill.skill_name,
+                    "tool_name": tool_call.name,
+                    "warning": tool_result[:200],
+                    "round": budget.rounds_used,
+                })
+            if tool_failed:
+                tool_warnings.append(
+                    f"Gate {skill.gate_number} {tool_call.name}: {tool_result[:100]}"
+                )
 
             if tool_call.name == "web_search":
                 budget.record_search()
@@ -503,6 +525,7 @@ class GateExecutor:
             latency_ms=latency,
             parse_status="text",
             tool_efficiency_score=eff,
+            tool_warnings=tool_warnings,
         )
 
     async def _execute_gate7(
@@ -522,7 +545,7 @@ class GateExecutor:
             gate7_tokens = 16384
         elif "gpt-4" in model_name or "gpt-5" in model_name:
             gate7_tokens = 16384
-        adapter = self._get_adapter(max_tokens=gate7_tokens)
+        adapter = self._get_adapter(max_tokens=gate7_tokens, json_mode=True)
 
         cross_gate_context = context.get_context_for_gate(7)
         user_msg = self._build_gate7_user_message(skill, context, cross_gate_context)
@@ -559,6 +582,20 @@ class GateExecutor:
         await asyncio.wait_for(_collect(), timeout=budget.timeout_seconds)
 
         parsed, parse_status = parse_skill_output(raw, CompanyFullReport)
+
+        # JSON repair fallback: if primary parse failed, try fast model to fix JSON
+        if parse_status == "raw_only" and raw.strip():
+            logger.warning("[gate7] primary parse failed, attempting JSON repair")
+            try:
+                repaired_raw = await self._repair_json(raw)
+                if repaired_raw:
+                    parsed, parse_status = parse_skill_output(repaired_raw, CompanyFullReport)
+                    if parse_status != "raw_only":
+                        raw = repaired_raw
+                        logger.info("[gate7] JSON repair succeeded")
+            except Exception as e:
+                logger.warning(f"[gate7] JSON repair failed: {e}")
+
         latency = int((time.time() - start_time) * 1000)
 
         return GateResult(
@@ -616,6 +653,41 @@ class GateExecutor:
         r'【置信度】[*\s]*\n?\s*([\d.]+)', re.DOTALL
     )
 
+    async def _repair_json(self, broken_json: str) -> Optional[str]:
+        """Use a fast/cheap model to repair malformed JSON from Gate 7."""
+        try:
+            from openai import AsyncOpenAI
+            aihub_key = getattr(settings, "aihubmix_api_key", None)
+            aihub_url = (
+                getattr(settings, "aihubmix_base_url", None) or "https://aihubmix.com/v1"
+            )
+            if not aihub_key:
+                return None
+
+            # Truncate if extremely long, keep enough for repair
+            text = broken_json[:12000]
+            prompt = (
+                "以下是一段损坏的 JSON 输出（可能包含多余文字、截断、或格式错误）。\n"
+                "请修复它，输出一个合法的 JSON 对象。只输出 JSON，不要加任何解释。\n\n"
+                f"{text}"
+            )
+
+            client = AsyncOpenAI(api_key=aihub_key, base_url=aihub_url)
+            resp = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model="gpt-4.1-nano",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=8000,
+                    temperature=0,
+                    response_format={"type": "json_object"},
+                ),
+                timeout=30,
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            logger.warning(f"[gate7] _repair_json error: {e}")
+            return None
+
     def _extract_core_conclusion(self, raw: str) -> Optional[str]:
         m = self._CORE_CONCLUSION_RE.search(raw)
         return m.group(1).strip() if m else None
@@ -658,11 +730,13 @@ class PipelineOrchestrator:
         context: PipelineContext,
         on_progress: Optional[Callable[[dict], Any]] = None,
         model_config: dict | None = None,
+        prompt_overrides: Optional[dict[int, str]] = None,
     ):
         self.gate_executor = gate_executor
         self.context = context
         self.on_progress = on_progress
         self.model_config = model_config or {}
+        self.prompt_overrides = prompt_overrides or {}
 
     def _emit(self, event: dict):
         if self.on_progress:
@@ -671,13 +745,40 @@ class PipelineOrchestrator:
             except Exception as e:
                 logger.warning(f"[orchestrator] progress emit error: {e}")
 
+    async def _get_gate_cache_key(self, skill: CompanySkill) -> Optional[str]:
+        """Build a cache key for a gate result. None if caching disabled."""
+        symbol = self.context.symbol
+        if not symbol:
+            return None  # no symbol → skip caching to avoid cross-contamination
+        import hashlib
+        prompt_hash = hashlib.md5(
+            skill.system_prompt[:200].encode()
+        ).hexdigest()[:8]
+        model = self.model_config.get("model", "unknown")
+        return f"company:gate:{symbol}:{model}:{skill.gate_number}:{prompt_hash}"
+
     async def run(self) -> dict:
         """Execute the full 7-gate pipeline."""
         results: dict[str, Any] = {}
         all_tool_calls: list[dict] = []
         total_start = time.time()
 
+        # Gate cache service (optional, non-blocking)
+        try:
+            from uteki.common.cache import get_cache_service
+            cache = get_cache_service()
+        except Exception:
+            cache = None
+
         for skill in COMPANY_SKILL_PIPELINE:
+            # Apply prompt override if provided (for A/B testing)
+            if skill.gate_number in self.prompt_overrides:
+                from dataclasses import replace
+                skill = replace(
+                    skill,
+                    system_prompt=self.prompt_overrides[skill.gate_number],
+                )
+
             logger.info(
                 f"[orchestrator] gate={skill.gate_number} skill={skill.skill_name} "
                 f"model={self.model_config.get('model', '?')}"
@@ -704,48 +805,99 @@ class PipelineOrchestrator:
                     timeout_seconds=GATE_TIMEOUT,
                 )
 
-            # Execute gate
-            try:
-                gate_result = await self.gate_executor.execute(
-                    skill, self.context, budget, self.on_progress,
-                )
-            except asyncio.TimeoutError:
-                timeout = GATE_TIMEOUT_GATE7 if skill.gate_number == 7 else GATE_TIMEOUT
-                logger.error(f"[orchestrator] TIMEOUT: {skill.skill_name} after {timeout}s")
+            # Check gate cache (gates 1-6 only, skip Gate 7 which synthesizes)
+            cached_result = None
+            cache_key = None
+            if cache and skill.gate_number < 7:
+                try:
+                    cache_key = await self._get_gate_cache_key(skill)
+                    cached_result = await cache.get(cache_key)
+                except Exception:
+                    pass
+
+            if cached_result:
+                logger.info(f"[orchestrator] gate={skill.gate_number} CACHE HIT")
                 gate_result = GateResult(
                     gate_number=skill.gate_number,
                     skill_name=skill.skill_name,
                     display_name=skill.display_name,
-                    raw="",
-                    parse_status="timeout",
-                    error=f"timeout after {timeout}s",
+                    raw=cached_result.get("raw", ""),
+                    core_conclusion=cached_result.get("core_conclusion"),
+                    parse_status="cached",
+                    latency_ms=0,
                 )
-            except Exception as e:
-                logger.error(f"[orchestrator] ERROR: {skill.skill_name}: {e}", exc_info=True)
-                gate_result = GateResult(
-                    gate_number=skill.gate_number,
-                    skill_name=skill.skill_name,
-                    display_name=skill.display_name,
-                    raw="",
-                    parse_status="error",
-                    error=str(e),
-                )
+            else:
+                pass  # fall through to execute
+
+            # Execute gate (if not cached)
+            if not cached_result:
+                try:
+                    gate_result = await self.gate_executor.execute(
+                        skill, self.context, budget, self.on_progress,
+                    )
+                    # Cache successful gate results (gates 1-6, 24h TTL)
+                    if cache and cache_key and skill.gate_number < 7 and not gate_result.error:
+                        try:
+                            await cache.set(cache_key, {
+                                "raw": gate_result.raw,
+                                "core_conclusion": gate_result.core_conclusion,
+                            }, ttl=86400)
+                        except Exception:
+                            pass
+                except asyncio.TimeoutError:
+                    timeout = GATE_TIMEOUT_GATE7 if skill.gate_number == 7 else GATE_TIMEOUT
+                    logger.error(f"[orchestrator] TIMEOUT: {skill.skill_name} after {timeout}s")
+                    gate_result = GateResult(
+                        gate_number=skill.gate_number,
+                        skill_name=skill.skill_name,
+                        display_name=skill.display_name,
+                        raw="",
+                        parse_status="timeout",
+                        error=f"timeout after {timeout}s",
+                    )
+                except Exception as e:
+                    logger.error(f"[orchestrator] ERROR: {skill.skill_name}: {e}", exc_info=True)
+                    gate_result = GateResult(
+                        gate_number=skill.gate_number,
+                        skill_name=skill.skill_name,
+                        display_name=skill.display_name,
+                        raw="",
+                        parse_status="error",
+                        error=str(e),
+                    )
 
             # Add to context
             self.context.add_gate_result(gate_result)
 
-            # ── Per-gate instant structuring (gates 1-6) ──
+            # ── Per-gate structuring ──
             parsed = None
             parse_status = gate_result.parse_status
             if skill.gate_number == 7 and gate_result.raw:
                 parsed, parse_status = parse_skill_output(gate_result.raw, CompanyFullReport)
             elif skill.skill_name in _GATE_SCHEMAS and gate_result.raw and not gate_result.error:
-                try:
-                    parsed, parse_status = await self._structurize_gate(
-                        skill.skill_name, gate_result.raw
-                    )
-                except Exception as e:
-                    logger.warning(f"[orchestrator] structurize {skill.skill_name} failed: {e}")
+                # Fire-and-forget async structuring (non-blocking)
+                _skill_name = skill.skill_name
+                _gate_num = skill.gate_number
+                _raw = gate_result.raw
+
+                async def _async_structurize(sn=_skill_name, gn=_gate_num, raw=_raw):
+                    try:
+                        p, ps = await self._structurize_gate(sn, raw)
+                        if p:
+                            pd = p.model_dump()
+                            results[sn]["parsed"] = pd
+                            results[sn]["parse_status"] = ps
+                            self._emit({
+                                "type": "gate_structured",
+                                "gate": gn,
+                                "skill": sn,
+                                "parsed": pd,
+                                "parse_status": ps,
+                            })
+                    except Exception as e:
+                        logger.warning(f"[orchestrator] async structurize {sn} failed: {e}")
+
+                asyncio.create_task(_async_structurize())
 
             parsed_dict = parsed.model_dump() if parsed else {}
             skill_result: dict[str, Any] = {
@@ -796,6 +948,8 @@ class PipelineOrchestrator:
             }
             if gate_result.error:
                 gate_event["error"] = gate_result.error
+            if gate_result.tool_warnings:
+                gate_event["tool_warnings"] = gate_result.tool_warnings
             self._emit(gate_event)
 
             logger.info(
@@ -1011,6 +1165,10 @@ class CompanySkillRunner:
     Usage:
         runner = CompanySkillRunner(model_config, company_data, on_progress=emit)
         result = await runner.run_pipeline()
+
+        # With prompt overrides (for A/B testing):
+        runner = CompanySkillRunner(model_config, company_data,
+                                   prompt_overrides={1: "new gate 1 prompt"})
     """
 
     def __init__(
@@ -1018,14 +1176,17 @@ class CompanySkillRunner:
         model_config: dict,
         company_data: dict,
         on_progress: Optional[Callable[[dict], Any]] = None,
+        prompt_overrides: Optional[dict[int, str]] = None,
     ):
         self.model_config = model_config
         self.company_data = company_data
         self.on_progress = on_progress
+        self.prompt_overrides = prompt_overrides
 
     async def run_pipeline(self) -> dict:
         data_text = format_company_data_for_prompt(self.company_data)
-        context = PipelineContext(company_data_text=data_text)
+        symbol = self.company_data.get("profile", {}).get("symbol", "")
+        context = PipelineContext(company_data_text=data_text, symbol=symbol)
 
         tool_executor = CompanyToolExecutor(company_data=self.company_data)
         tool_parser = ToolCallParser()
@@ -1036,6 +1197,7 @@ class CompanySkillRunner:
             context=context,
             on_progress=self.on_progress,
             model_config=self.model_config,
+            prompt_overrides=self.prompt_overrides,
         )
 
         return await orchestrator.run()
