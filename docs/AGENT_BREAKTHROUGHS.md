@@ -2,10 +2,180 @@
 
 > 记录 Company Agent / Index Agent 开发中遇到的关键技术问题、排查思路和解决方案。
 > 每条记录格式：**问题** → **结果** → **方法**
+>
+> 分为两部分：**系统级架构难点**（长期设计决策）和 **实战 Bug 修复**（具体问题排查）
 
 ---
 
-## 2026-04-06
+## 系统级架构难点
+
+### S1. 7-Gate ReAct Pipeline — 工具调用循环控制
+
+**问题（难点）**
+
+Company Agent 的每个 Gate 是一个完整的 ReAct 循环（思考→工具调用→观察→再思考），但 LLM 可能陷入无限工具调用循环、超时不结论、或输出过短的退化行为。需要在"给 Agent 自由度"和"确保收敛"之间平衡。
+
+**结果（Before → After）**
+
+| | Before | After |
+|---|--------|-------|
+| 工具调用控制 | 无限制，LLM 可能死循环 | ToolBudget: max_searches=6, max_rounds=5, max_tool_calls=10, timeout=180s |
+| 输出质量 | 可能返回空或极短结论 | 输出 <200 字符时强制追加一轮 LLM 调用要求完整结论 |
+| 超时处理 | 无 | 每轮检查剩余时间，≤0 则中断；asyncio.wait_for 保底 5s 宽限 |
+| 预算耗尽行为 | 无 — 继续调用 | 注入 system 提示"预算已用完，请直接给出结论" |
+
+**方法（思路 + 方法）**
+
+- **ToolBudget 硬约束**：每个 gate 分配独立预算（Gate 7 为 0 工具 / 1 轮 / 300s），从源头防止失控
+- **隐式结论兜底**：Agent 未产出 `<conclude>` 标签时，将已积累文本拼接为 raw 输出，保证不返回空
+- **流式分块输出**：每积累 80 字符才 emit 一次 SSE 事件（`_STREAM_CHUNK_SIZE=80`），减少网络开销
+- **工具效率评分**：`tool_efficiency_score = 返回 >100 字符的工具次数 / 总工具次数`，用于后续质量评估
+
+**关键文件**：`backend/uteki/domains/company/skill_runner.py` — `GateExecutor`, `ToolBudget`
+
+---
+
+### S2. 跨 Gate 上下文分层传递 — 信息密度 vs 完整性
+
+**问题（难点）**
+
+7 个 Gate 依次执行，后续 Gate 需要前序 Gate 的结论作为输入。但如果每个 Gate 都传完整原文，Gate 7 的 prompt 会超过模型上下文窗口。如何在"信息压缩"和"不丢关键细节"之间取舍？
+
+**结果（Before → After）**
+
+| | Before | After |
+|---|--------|-------|
+| Gate 2-6 输入 | 无前序上下文 | 摘要模式：核心结论 + top 5 关键发现 + 置信度 |
+| Gate 7 输入 | 无前序上下文 | 完整模式：全部 6 gate 原文 + 反思结果 |
+| 反思结果 | 无 | Gate 3/5 后执行反思，矛盾/建议注入后续所有 gate |
+| 失败 gate 处理 | 中断流程 | 标记为"数据不足"，Gate 7 仍可基于其他 gate 综合判断 |
+
+**方法（思路 + 方法）**
+
+- **PipelineContext 双模式**：`_summary_context()` 给 Gate 2-6（精简），`_full_context()` 给 Gate 7（完整）
+- **Reflection Checkpoints**：Gate 3 和 Gate 5 后触发反思检查，检测跨 gate 矛盾（如 Gate 1 说"高增长"但 Gate 3 说"营收下滑"）
+- **Downstream Hints**：反思产出的修正建议累积到全局 hints 列表，自动注入后续所有 gate 的 prompt
+- **GateResult.summary 降级**：优先用 `core_conclusion`，无则截取 raw 前 800 字符
+
+**关键文件**：`backend/uteki/domains/agent/core/context.py` — `PipelineContext`
+
+---
+
+### S3. Arena 多模型并发投票 — 7 模型同时跑 + 交叉评审
+
+**问题（难点）**
+
+Index Agent 的 Arena 机制需要 7 个 LLM 模型并发执行完整分析 pipeline，然后交叉投票评审。难点：
+- 7 个并发 LLM 调用，每个可能超时/失败
+- 投票阶段依赖所有模型的输出，但不能因一个模型失败而阻塞
+- 每个模型需要独立 DB session（并发写入冲突）
+- API key 管理混乱（Admin DB / legacy / hardcoded 三套来源）
+
+**结果（Before → After）**
+
+| | Before | After |
+|---|--------|-------|
+| 执行方式 | 串行，1 个模型跑完再跑下一个 | `asyncio.gather()` 7 模型并发 |
+| 超时策略 | 无 | 双重超时：首次 60s + 重试 90s（延长 50%）|
+| 降级策略 | 无 | Pipeline 失败 → 降级为 single-shot 单次调用 |
+| 模型配置 | 硬编码 | 三级优先：Admin DB（加密）→ legacy agent_memory → 默认配置，60s 缓存 |
+
+**方法（思路 + 方法）**
+
+- **3-Phase Pipeline**：Decide（并发分析）→ Vote（交叉评审）→ Tally（计票选优），每阶段保存 `pipeline_state` 到 DB，支持断点恢复
+- **独立 DB Session**：每个模型通过 `db_manager.get_postgres_session()` 获取独立 session，避免并发写入冲突
+- **Pipeline Fallback**：模型执行完整 4-skill pipeline 超时后，降级为单次 LLM 调用，确保至少有输出
+- **Token 估算**：LLM 未返回 usage 时，使用 `len(text) // 4` 粗估 token 数，用于成本计算
+
+**关键文件**：`backend/uteki/domains/index/services/arena_service.py`
+
+---
+
+### S4. 多 LLM Provider 统一适配 — 8 家 API 一个接口
+
+**问题（难点）**
+
+系统需要支持 OpenAI / Anthropic / DeepSeek / Qwen / Google / MiniMax / Doubao 共 8 家 LLM，每家的 API 格式、消息结构、特殊模型行为（推理模型、thinking 模式）完全不同。如何用一个统一接口屏蔽差异？
+
+**结果（Before → After）**
+
+| | Before | After |
+|---|--------|-------|
+| 调用方式 | 每家 Provider 单独写调用逻辑 | `LLMAdapterFactory.create()` → `adapter.chat()` 统一接口 |
+| 消息格式 | 不统一 | `LLMMessage(role, content)` 统一 → 各 provider 内部转换 |
+| 推理模型 | 不支持 | 自动检测 o1/o3/deepseek-reasoner/claude-thinking，调整参数 |
+| API key 管理 | 8 套 key | AIHubMix 统一网关，1 个 key 覆盖所有 |
+
+**方法（思路 + 方法）**
+
+- **Adapter Pattern**：`LLMConfig` + `LLMMessage` 统一数据结构，各 Provider 实现 `convert_messages()` / `convert_tools()`
+- **推理模型特殊处理**：
+  - OpenAI o-series：禁 temperature，用 `max_completion_tokens` 替代 `max_tokens`，提取 `reasoning_content`
+  - DeepSeek reasoner：禁 streaming，禁 temperature
+  - Claude thinking：temperature 强制为 1，`thinking.budget_tokens` 控制预算
+- **AIHubMix 网关**：所有模型通过 OpenAI-compatible 端点路由，`_MODEL_NAME_MAP` 自动映射 legacy 名称
+- **JSON mode 差异**：OpenAI 支持 `response_format: json`，Anthropic 不支持 → 静默忽略
+
+**关键文件**：`backend/uteki/domains/agent/llm_adapter.py` — `LLMAdapterFactory`, `OpenAIAdapter`, `AnthropicAdapter`
+
+---
+
+### S5. SSE 流式分析 + 断线重连 — 10 分钟长连接可靠性
+
+**问题（难点）**
+
+Company Agent 分析耗时 5-10 分钟，使用 SSE（Server-Sent Events）实时推送进度。但浏览器/网络可能中途断连，必须：
+- Pipeline 在后台继续执行，不因客户端断开而中止
+- 客户端重连后能回放已完成的 gate 结果 + 接收后续实时事件
+- 不能丢失任何 gate 的分析结果
+
+**结果（Before → After）**
+
+| | Before | After |
+|---|--------|-------|
+| 断连行为 | Pipeline 随连接中断 | `asyncio.create_task()` 独立运行，客户端断开不影响 |
+| 重连 | 无法重连，需重新分析 | `/tasks/{id}/stream` 端点：DB 回放已完成 gate + Redis Pub/Sub 接收后续 |
+| 事件持久化 | 仅 SSE 内存队列 | 双写：SSE queue + Redis publish + DB 持久化 |
+| 完成通知 | 无 | Notification service 推送分析完成消息 |
+
+**方法（思路 + 方法）**
+
+- **Fire-and-Forget Task**：SSE endpoint 立即创建 async task 并返回事件流，task 内部通过 `queue.put_nowait()` 推送事件
+- **三重事件发布**：每个 gate_complete 事件同时写入 (1) 客户端 SSE queue (2) Redis channel (3) PostgreSQL
+- **重连 3 阶段**：Phase 1 从 DB 回放 → Phase 2 订阅 Redis 接收实时 → Phase 3 检查完成状态
+- **Queue Sentinel**：Pipeline 完成时向 queue 放入 `None` 作为 EOF 信号；但若 task 崩溃未放 sentinel，客户端会永久挂起（已知边界问题）
+
+**关键文件**：`backend/uteki/domains/company/api.py` — `analyze_company_stream()`, `reconnect_task_stream()`
+
+---
+
+### S6. Agent 记忆系统 — 双写 + 自动压缩
+
+**问题（难点）**
+
+Agent 需要持久化记忆（历史决策、反思、经验），支持按 agent_key 区分共享/私有记忆。但 Supabase 作为主存储可能不可用，需要 PostgreSQL fallback。同时记忆不能无限增长。
+
+**结果（Before → After）**
+
+| | Before | After |
+|---|--------|-------|
+| 存储 | 仅内存 | Supabase 主 + PostgreSQL 备，双写 |
+| 隔离 | 无 | `agent_key` 区分 per-agent 私有 vs 共享记忆 |
+| 增长控制 | 无 | experience 超过 30 条自动压缩，保留最新 10 条 + 1 条合并摘要 |
+| 查询 | 无 | `get_summary()` 聚合最近决策 + 反思 + 经验 + arena 投票赢家 |
+
+**方法（思路 + 方法）**
+
+- **Dual-Write**：先写 Supabase，异步 `_backup_rows()` 写 PostgreSQL，Supabase 失败仅 warn 不阻塞
+- **Memory Compression**：超过阈值时，保留最新 N 条，其余拼接为单条合并记忆，删除旧条目
+- **分类查询**：5 种 category（decision / reflection / experience / arena_learning / arena_vote_reasoning），按需拉取
+- **已知限制**：`supabase_available` 是启动时一次性检测，运行中 Supabase 宕机不会自动切换
+
+**关键文件**：`backend/uteki/domains/index/services/memory_service.py`
+
+---
+
+## 实战 Bug 修复（2026-04-06）
 
 ### 1. Company Agent 缓存污染 — 分析 TSLA 返回 MSFT 结果
 
