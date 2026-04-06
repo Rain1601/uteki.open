@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Trend line behind candles -->
+  <polyline points="20,140 55,80 100,60 145,93 180,50" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.35"/>
+  <!-- Left candle -->
+  <line x1="55" y1="28" x2="55" y2="52" stroke="#dbeafe" stroke-width="4" stroke-linecap="round"/>
+  <rect x="40" y="52" width="30" height="56" rx="5" fill="#3b82f6" stroke="#e8f0fe" stroke-width="3.5"/>
+  <line x1="55" y1="108" x2="55" y2="132" stroke="#dbeafe" stroke-width="4" stroke-linecap="round"/>
+  <!-- Middle candle -->
+  <line x1="100" y1="16" x2="100" y2="38" stroke="#dbeafe" stroke-width="4" stroke-linecap="round"/>
+  <rect x="83" y="38" width="34" height="84" rx="5" fill="#3b82f6" stroke="#e8f0fe" stroke-width="3.5"/>
+  <line x1="100" y1="122" x2="100" y2="156" stroke="#dbeafe" stroke-width="4" stroke-linecap="round"/>
+  <!-- Right candle -->
+  <line x1="145" y1="50" x2="145" y2="70" stroke="#dbeafe" stroke-width="4" stroke-linecap="round"/>
+  <rect x="130" y="70" width="30" height="46" rx="5" fill="#3b82f6" stroke="#e8f0fe" stroke-width="3.5"/>
+  <line x1="145" y1="116" x2="145" y2="142" stroke="#dbeafe" stroke-width="4" stroke-linecap="round"/>
+</svg>

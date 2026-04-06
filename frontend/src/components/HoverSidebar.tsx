@@ -26,13 +26,15 @@ import {
   LineChart,
   LayoutDashboard,
   Building2,
-
+  Boxes,
+  LayoutGrid,
   User,
 } from 'lucide-react';
 import { useTheme } from '../theme/ThemeProvider';
 import { useResponsive } from '../hooks/useResponsive';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useAuth } from '../hooks/useAuth';
+import NotificationBell from './NotificationBell';
 
 export const SIDEBAR_COLLAPSED_WIDTH = 54;
 export const SIDEBAR_EXPANDED_WIDTH = 240;
@@ -67,6 +69,12 @@ const ICON_STROKE = 1.75;
 const menuItems: MenuCategory[] = [
   {
     category: 'MAIN',
+    items: [
+      { text: 'Dashboard', icon: <LayoutGrid size={ICON_SIZE} strokeWidth={ICON_STROKE} />, path: '/dashboard' },
+    ],
+  },
+  {
+    category: '',
     items: [
       { text: 'AI Agent', icon: <Bot size={ICON_SIZE} strokeWidth={ICON_STROKE} />, path: '/agent' },
       { text: '新闻时间线', icon: <FileText size={ICON_SIZE} strokeWidth={ICON_STROKE} />, path: '/news-timeline' },
@@ -161,22 +169,7 @@ export default function HoverSidebar() {
             <Menu size={24} />
           </IconButton>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
-            <Box
-              sx={{
-                width: 28,
-                height: 28,
-                borderRadius: '6px',
-                background: `linear-gradient(135deg, ${theme.brand.primary} 0%, ${theme.brand.accent} 100%)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: '1rem',
-              }}
-            >
-              U
-            </Box>
+            <img src="/logo-uteki.svg" alt="uteki" style={{ width: 28, height: 28 }} />
             <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.text.primary }}>
               uteki
             </Typography>
@@ -210,22 +203,7 @@ export default function HoverSidebar() {
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '8px',
-                  background: `linear-gradient(135deg, ${theme.brand.primary} 0%, ${theme.brand.accent} 100%)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: '1.2rem',
-                }}
-              >
-                U
-              </Box>
+              <img src="/logo-uteki.svg" alt="uteki" style={{ width: 32, height: 32 }} />
               <Typography variant="h6" sx={{ fontWeight: 600, color: theme.text.primary }}>
                 uteki
               </Typography>
@@ -340,6 +318,12 @@ export default function HoverSidebar() {
                   {user?.name || '用户'}
                 </Typography>
               </Box>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, mb: 1.5 }}>
+              <NotificationBell />
+              <Typography sx={{ flex: 1, fontSize: 13, color: theme.text.secondary }}>
+                通知
+              </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1 }}>
               <Box sx={{ color: theme.text.secondary }}>
@@ -580,7 +564,7 @@ export default function HoverSidebar() {
         ))}
       </Box>
 
-      {/* Bottom: theme toggle */}
+      {/* Bottom: notification + theme toggle */}
       <Box
         sx={{
           borderTop: `1px solid ${theme.border.divider}`,
@@ -590,6 +574,32 @@ export default function HoverSidebar() {
           overflow: 'hidden',
         }}
       >
+        {/* Notification Bell */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+          <Tooltip title={!expanded ? '通知' : ''} placement="right" arrow>
+            <Box sx={{
+              width: SIDEBAR_COLLAPSED_WIDTH,
+              minWidth: SIDEBAR_COLLAPSED_WIDTH,
+              display: 'flex',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <NotificationBell />
+            </Box>
+          </Tooltip>
+          <Typography noWrap sx={{
+            flex: 1,
+            fontSize: 12,
+            color: theme.text.muted,
+            opacity: expanded ? 1 : 0,
+            transition: `opacity 250ms ${SIDEBAR_TRANSITION_EASING}`,
+            transitionDelay: expanded ? '100ms' : '0ms',
+          }}>
+            通知
+          </Typography>
+        </Box>
+
+        {/* Theme Toggle */}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title={!expanded ? (isDark ? '深色模式' : '浅色模式') : ''} placement="right" arrow>
             <Box sx={{
