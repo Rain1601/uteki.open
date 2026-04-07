@@ -104,6 +104,17 @@ Frontend login redirects to backend OAuth endpoint (GitHub/Google/Apple). Backen
 
 GitHub Actions (`.github/workflows/deploy.yml`): push to main → Docker build → Google Artifact Registry → Cloud Run. Backend: 2 CPU, 1GB RAM, max 10 instances. Frontend: 1 CPU, 256MB.
 
+## Local Dev URLs
+
+- **Backend API docs**: http://localhost:8888/docs
+- **Backend health check**: http://localhost:8888/health
+- **Frontend**: http://localhost:5173
+- **MinIO console**: http://localhost:9001 (uteki / uteki_dev_pass)
+
+## Configuration
+
+Backend `.env` file in `backend/` — see `backend/.env.example` or README for template. Database URLs, Redis, MinIO credentials go here. LLM provider API keys and exchange credentials are configured at runtime via the `/admin` page, not in `.env`.
+
 ## Important Gotchas
 
 - **Local dev port is 8888** — never use 8000 or other ports
@@ -111,6 +122,7 @@ GitHub Actions (`.github/workflows/deploy.yml`): push to main → Docker build �
 - **Frontend has pre-existing TS errors** in news/calendar components — ignore them
 - **Google Gemini** needs `base_url` from `settings.google_api_base_url`
 - **Root directory docs policy**: Do not create `.md` files in project root without explicit permission (see `.cursorrules`)
+- **Commits**: Never commit without user instruction. Use semantic commit messages. Always include `Co-Authored-By:` line
 
 ## Tooling Config (in `backend/pyproject.toml`)
 
