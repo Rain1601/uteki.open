@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Box, Typography, IconButton, Switch } from '@mui/material';
-import { Loader2, Trash2, Scale } from 'lucide-react';
+import { Loader2, Trash2, Scale, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import TradingViewChart from '../components/index/TradingViewChart';
 import { ModelLogo } from '../components/index/ModelLogos';
 import PageHeader from '../components/PageHeader';
@@ -126,6 +126,89 @@ export default function CompanyAgentPage() {
 
   // Left panel tab: watchlist or recommendations
   const [leftTab, setLeftTab] = useState<'watchlist' | 'recommend'>('watchlist');
+
+  // ── Watchlist groups ──
+  interface WatchlistGroup {
+    id: string;
+    name: string;
+    symbols: { symbol: string; company: string }[];
+  }
+  const [watchlistGroups, setWatchlistGroups] = useState<WatchlistGroup[]>([
+    { id: 'company', name: '公司', symbols: [
+      { symbol: 'TSLA', company: 'Tesla, Inc.' },
+      { symbol: 'AAPL', company: 'Apple Inc.' },
+      { symbol: 'GOOGL', company: 'Alphabet Inc.' },
+      { symbol: 'TSM', company: 'Taiwan Semiconductor Manufacturing Comp.' },
+      { symbol: 'MSFT', company: 'Microsoft Corporation' },
+    ]},
+    { id: 'index', name: '指数', symbols: [
+      { symbol: 'SPY', company: 'SPDR S&P 500 ETF' },
+      { symbol: 'QQQ', company: 'Invesco QQQ Trust' },
+      { symbol: 'DIA', company: 'SPDR Dow Jones ETF' },
+      { symbol: 'IWM', company: 'iShares Russell 2000 ETF' },
+    ]},
+    { id: 'crypto', name: '加密', symbols: [
+      { symbol: 'COIN', company: 'Coinbase Global' },
+      { symbol: 'MSTR', company: 'MicroStrategy Inc.' },
+    ]},
+  ]);
+  const [activeGroupId, setActiveGroupId] = useState('company');
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const groupScrollRef = useRef<HTMLDivElement>(null);
+  const [groupScrollState, setGroupScrollState] = useState({ canLeft: false, canRight: false });
+
+  const updateGroupScroll = useCallback(() => {
+    const el = groupScrollRef.current;
+    if (!el) return;
+    setGroupScrollState({
+      canLeft: el.scrollLeft > 1,
+      canRight: el.scrollLeft < el.scrollWidth - el.clientWidth - 1,
+    });
+  }, []);
+
+  const scrollGroup = (dir: 'left' | 'right') => {
+    const el = groupScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === 'left' ? -80 : 80, behavior: 'smooth' });
+    setTimeout(updateGroupScroll, 200);
+  };
+
+  const handleAddGroup = () => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    const id = `group-${Date.now()}`;
+    setWatchlistGroups(prev => [...prev, { id, name, symbols: [] }]);
+    setActiveGroupId(id);
+    setAddingGroup(false);
+    setNewGroupName('');
+    setTimeout(() => {
+      const el = groupScrollRef.current;
+      if (el) { el.scrollLeft = el.scrollWidth; updateGroupScroll(); }
+    }, 50);
+  };
+
+  const handleDeleteGroup = (id: string) => {
+    setWatchlistGroups(prev => prev.filter(g => g.id !== id));
+    if (activeGroupId === id) setActiveGroupId(watchlistGroups[0]?.id || '');
+  };
+
+  const handleAddSymbolToGroup = (groupId: string, symbol: string, company: string) => {
+    setWatchlistGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      if (g.symbols.some(s => s.symbol === symbol)) return g;
+      return { ...g, symbols: [...g.symbols, { symbol, company }] };
+    }));
+  };
+
+  const handleRemoveSymbolFromGroup = (groupId: string, symbol: string) => {
+    setWatchlistGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      return { ...g, symbols: g.symbols.filter(s => s.symbol !== symbol) };
+    }));
+  };
+
+  useEffect(() => { updateGroupScroll(); }, [watchlistGroups, updateGroupScroll]);
 
   interface Recommendation {
     id: string; symbol: string; company: string; model: string;
@@ -1097,58 +1180,138 @@ export default function CompanyAgentPage() {
                 '&::-webkit-scrollbar-thumb': { bgcolor: `${theme.text.muted}18`, borderRadius: 4 },
               }}>
                 {leftTab === 'watchlist' ? (
-                  /* ── Watchlist tab ── */
-                  (() => {
-                    const seen = new Set<string>();
-                    const items = filteredAnalyses.filter((a) => {
-                      if (seen.has(a.symbol)) return false;
-                      seen.add(a.symbol);
-                      return true;
-                    });
-                    return items.length > 0 ? items.map((a) => {
-                      const actionColor = ACTION_COLORS[a.verdict_action] || theme.text.muted;
-                      const isActive = chartSymbol === a.symbol;
-                      return (
-                        <Box
-                          key={a.symbol}
-                          onClick={() => setWatchlistSymbol(a.symbol)}
-                          sx={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            px: 1.5, py: 1, cursor: 'pointer',
-                            borderBottom: `1px solid ${theme.border.subtle}15`,
-                            bgcolor: isActive ? `${theme.brand.primary}08` : 'transparent',
-                            '&:hover': { bgcolor: `${theme.text.primary}05` },
-                          }}
-                        >
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontSize: 12, fontWeight: 700, color: theme.text.primary }}>
-                              {a.symbol}
-                            </Typography>
-                            <Typography sx={{ fontSize: 9, color: theme.text.disabled, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {a.company_name || ''}
-                            </Typography>
-                          </Box>
-                          <Box sx={{
-                            px: 0.6, py: 0.15, borderRadius: '4px',
-                            bgcolor: `${actionColor}12`, flexShrink: 0, ml: 0.5,
-                          }}>
-                            <Typography sx={{ fontSize: 9, fontWeight: 800, color: actionColor, lineHeight: 1.4 }}>
-                              {a.verdict_action}
+                  /* ── Watchlist tab with groups ── */
+                  <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    {/* Group tabs with arrows */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, borderBottom: `1px solid ${theme.border.subtle}20` }}>
+                      {groupScrollState.canLeft && (
+                        <IconButton size="small" onClick={() => scrollGroup('left')} sx={{ p: 0, width: 16, flexShrink: 0, color: theme.text.muted, '&:hover': { color: theme.text.primary } }}>
+                          <ChevronLeft size={12} />
+                        </IconButton>
+                      )}
+                      <Box
+                        ref={groupScrollRef}
+                        onScroll={updateGroupScroll}
+                        sx={{
+                          flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0,
+                          '&::-webkit-scrollbar': { display: 'none' },
+                        }}
+                      >
+                        {watchlistGroups.map(g => (
+                          <Box
+                            key={g.id}
+                            onClick={() => setActiveGroupId(g.id)}
+                            sx={{
+                              px: 0.75, py: 0.4, cursor: 'pointer', flexShrink: 0,
+                              borderBottom: activeGroupId === g.id ? `2px solid ${theme.brand.primary}` : '2px solid transparent',
+                              '&:hover': { bgcolor: `${theme.text.primary}05` },
+                            }}
+                          >
+                            <Typography sx={{
+                              fontSize: 9, fontWeight: activeGroupId === g.id ? 700 : 500, whiteSpace: 'nowrap',
+                              color: activeGroupId === g.id ? theme.text.primary : theme.text.disabled,
+                            }}>
+                              {g.name}
+                              <Box component="span" sx={{ ml: 0.3, fontSize: 8, color: theme.text.disabled }}>
+                                {g.symbols.length}
+                              </Box>
                             </Typography>
                           </Box>
-                        </Box>
-                      );
-                    }) : (
-                      <Box sx={{ p: 2, textAlign: 'center' }}>
-                        <Typography sx={{ fontSize: 10, color: theme.text.disabled, lineHeight: 1.6 }}>
-                          暂无关注
-                        </Typography>
-                        <Typography sx={{ fontSize: 9, color: theme.text.disabled, mt: 0.5 }}>
-                          运行分析后自动添加
-                        </Typography>
+                        ))}
+                        {/* Add group button / input */}
+                        {addingGroup ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, px: 0.3 }}>
+                            <input
+                              autoFocus
+                              value={newGroupName}
+                              onChange={e => setNewGroupName(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleAddGroup(); if (e.key === 'Escape') { setAddingGroup(false); setNewGroupName(''); } }}
+                              onBlur={() => { if (newGroupName.trim()) handleAddGroup(); else { setAddingGroup(false); setNewGroupName(''); } }}
+                              placeholder="名称"
+                              style={{
+                                width: 40, border: 'none', outline: 'none', fontSize: 9,
+                                background: 'transparent', color: theme.text.primary, padding: '2px 4px',
+                                borderBottom: `1px solid ${theme.brand.primary}`,
+                              }}
+                            />
+                          </Box>
+                        ) : (
+                          <IconButton
+                            size="small"
+                            onClick={() => setAddingGroup(true)}
+                            sx={{ p: 0, width: 20, height: 20, flexShrink: 0, color: theme.text.disabled, '&:hover': { color: theme.text.primary } }}
+                          >
+                            <Plus size={10} />
+                          </IconButton>
+                        )}
                       </Box>
-                    );
-                  })()
+                      {groupScrollState.canRight && (
+                        <IconButton size="small" onClick={() => scrollGroup('right')} sx={{ p: 0, width: 16, flexShrink: 0, color: theme.text.muted, '&:hover': { color: theme.text.primary } }}>
+                          <ChevronRight size={12} />
+                        </IconButton>
+                      )}
+                    </Box>
+
+                    {/* Symbol list for active group */}
+                    <Box sx={{ flex: 1, overflow: 'auto', '&::-webkit-scrollbar': { width: 3 }, '&::-webkit-scrollbar-thumb': { bgcolor: `${theme.text.muted}18`, borderRadius: 4 } }}>
+                      {(() => {
+                        const group = watchlistGroups.find(g => g.id === activeGroupId);
+                        if (!group || group.symbols.length === 0) {
+                          return (
+                            <Box sx={{ p: 2, textAlign: 'center' }}>
+                              <Typography sx={{ fontSize: 10, color: theme.text.disabled, lineHeight: 1.6 }}>
+                                暂无关注
+                              </Typography>
+                              <Typography sx={{ fontSize: 9, color: theme.text.disabled, mt: 0.5 }}>
+                                在搜索框中搜索并添加
+                              </Typography>
+                            </Box>
+                          );
+                        }
+                        // Merge analysis data with watchlist symbols
+                        return group.symbols.map(ws => {
+                          const analysis = filteredAnalyses.find(a => a.symbol === ws.symbol);
+                          const actionColor = analysis ? (ACTION_COLORS[analysis.verdict_action] || theme.text.muted) : theme.text.disabled;
+                          const isActive = chartSymbol === ws.symbol;
+                          return (
+                            <Box
+                              key={ws.symbol}
+                              onClick={() => setWatchlistSymbol(ws.symbol)}
+                              sx={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                px: 1.5, py: 1, cursor: 'pointer',
+                                borderBottom: `1px solid ${theme.border.subtle}15`,
+                                bgcolor: isActive ? `${theme.brand.primary}08` : 'transparent',
+                                '&:hover': { bgcolor: `${theme.text.primary}05` },
+                              }}
+                            >
+                              <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Typography sx={{ fontSize: 12, fontWeight: 700, color: theme.text.primary }}>
+                                  {ws.symbol}
+                                </Typography>
+                                <Typography sx={{ fontSize: 9, color: theme.text.disabled, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {ws.company}
+                                </Typography>
+                              </Box>
+                              {analysis ? (
+                                <Box sx={{ px: 0.6, py: 0.15, borderRadius: '4px', bgcolor: `${actionColor}12`, flexShrink: 0, ml: 0.5 }}>
+                                  <Typography sx={{ fontSize: 9, fontWeight: 800, color: actionColor, lineHeight: 1.4 }}>
+                                    {analysis.verdict_action}
+                                  </Typography>
+                                </Box>
+                              ) : (
+                                <Box sx={{ px: 0.6, py: 0.15, borderRadius: '4px', bgcolor: `${theme.text.disabled}08`, flexShrink: 0, ml: 0.5 }}>
+                                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: theme.text.disabled, lineHeight: 1.4 }}>
+                                    WATCH
+                                  </Typography>
+                                </Box>
+                              )}
+                            </Box>
+                          );
+                        });
+                      })()}
+                    </Box>
+                  </Box>
                 ) : (
                   /* ── Recommendations tab ── */
                   recommendations.map(rec => (
