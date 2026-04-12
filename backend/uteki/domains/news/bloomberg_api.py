@@ -51,6 +51,9 @@ async def get_monthly_news(
     category: Optional[str] = Query(None, description="分类筛选: all/important"),
 ):
     """获取指定月份的 Bloomberg 新闻（按日期分组）"""
+    if category == 'all':
+        category = None
+
     cache = get_cache_service()
 
     async def _fetch():

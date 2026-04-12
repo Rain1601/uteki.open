@@ -35,6 +35,10 @@ async def get_monthly_news(
     Returns:
         按日期分组的新闻字典 {"2024-01-15": [...], "2024-01-16": [...]}
     """
+    # Treat 'all' as no filter
+    if category == 'all':
+        category = None
+
     cache = get_cache_service()
 
     async def _fetch():
