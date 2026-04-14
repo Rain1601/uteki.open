@@ -98,7 +98,9 @@ class TestSkillPipelineDefinitions:
         decision_skill = SKILL_PIPELINE[-1]
         assert decision_skill.skill_name == "make_decision"
         assert decision_skill.output_schema is not None
-        assert "action" in decision_skill.output_schema.get("properties", decision_skill.output_schema)
+        props = decision_skill.output_schema.get("properties", decision_skill.output_schema)
+        # Schema uses Chinese field names: 操作 (action), 信心度 (confidence), 决策理由 (reasoning)
+        assert "操作" in props, f"Expected '操作' in output_schema properties, got: {list(props.keys())}"
 
     def test_each_skill_has_system_prompt(self):
         for skill in SKILL_PIPELINE:
