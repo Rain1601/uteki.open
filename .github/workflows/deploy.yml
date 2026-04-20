@@ -55,6 +55,8 @@ jobs:
   lint-frontend:
     name: Lint Frontend (advisory)
     runs-on: ubuntu-latest
+    # Advisory job — never blocks the workflow, even if setup or lint breaks.
+    continue-on-error: true
 
     steps:
       - name: Checkout code
@@ -69,8 +71,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          # cache: pnpm disabled — pnpm-action-setup's store path confuses
+          # setup-node's cache resolution ("Some specified paths were not
+          # resolved"). Cost is ~20s extra install; acceptable for advisory.
 
       - name: Install dependencies
         working-directory: frontend
