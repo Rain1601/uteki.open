@@ -12,6 +12,9 @@ env:
   GCP_REGION: us-central1
   BACKEND_SERVICE: uteki-backend
   FRONTEND_SERVICE: uteki-frontend
+  # Force all JS actions onto Node.js 24 — avoids the Node 20 deprecation warning
+  # regardless of which action major versions happen to be pinned below.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   test-backend:
@@ -20,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,6 +39,11 @@ jobs:
         working-directory: backend
         run: poetry install --no-interaction --no-root
 
+      - name: Ruff (advisory — non-blocking; surfaces as PR annotations)
+        working-directory: backend
+        continue-on-error: true
+        run: poetry run ruff check . --output-format=github
+
       - name: Run tests
         working-directory: backend
         env:
@@ -44,6 +52,35 @@ jobs:
           SECRET_KEY: ci-test-secret-key
         run: poetry run pytest --tb=short -q
 
+  lint-frontend:
+    name: Lint Frontend (advisory)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint (advisory — does not block deploy)
+        working-directory: frontend
+        continue-on-error: true
+        run: pnpm lint
+
   deploy-backend:
     name: Deploy Backend
     runs-on: ubuntu-latest
@@ -51,15 +88,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker $GCP_REGION-docker.pkg.dev
@@ -106,15 +143,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker $GCP_REGION-docker.pkg.dev
